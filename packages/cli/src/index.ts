@@ -21,6 +21,7 @@ import { clickCommand } from "./commands/click.js";
 import { fillCommand } from "./commands/fill.js";
 import { closeCommand } from "./commands/close.js";
 import { getCommand, type GetAttribute } from "./commands/get.js";
+import { screenshotCommand } from "./commands/screenshot.js";
 import { daemonCommand, stopCommand, statusCommand } from "./commands/daemon.js";
 import { reloadCommand } from "./commands/reload.js";
 
@@ -41,6 +42,7 @@ bb-browser - AI Agent 浏览器自动化工具
   get text <ref>    获取元素文本
   get url           获取当前页面 URL
   get title         获取页面标题
+  screenshot [path] 截取当前页面
   daemon            前台启动 Daemon
   start             前台启动 Daemon（daemon 的别名）
   stop              停止 Daemon
@@ -222,6 +224,12 @@ async function main(): Promise<void> {
 
       case "close": {
         await closeCommand({ json: parsed.flags.json });
+        break;
+      }
+
+      case "screenshot": {
+        const outputPath = parsed.args[0];
+        await screenshotCommand(outputPath, { json: parsed.flags.json });
         break;
       }
 
