@@ -5,7 +5,7 @@
 
 import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
-import { getSnapshot, clickElement, fillElement, getElementText } from './dom-service';
+import { getSnapshot, clickElement, fillElement, getElementText, waitForElement } from './dom-service';
 
 /**
  * 处理收到的命令
@@ -43,6 +43,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
 
       case 'screenshot':
         result = await handleScreenshot(command);
+        break;
+
+      case 'wait':
+        result = await handleWait(command);
         break;
 
       default:
@@ -414,6 +418,79 @@ async function handleScreenshot(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Screenshot failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 wait 命令 - 等待时间或元素
+ */
+async function handleWait(command: CommandEvent): Promise<CommandResult> {
+  const waitType = command.waitType as string;
+
+  if (waitType === 'time') {
+    // 等待指定时间
+    const ms = command.ms as number;
+    if (!ms || ms < 0) {
+      return {
+        id: command.id,
+        success: false,
+        error: 'Invalid ms parameter',
+      };
+    }
+
+    console.log('[CommandHandler] Waiting for', ms, 'ms');
+    await new Promise(resolve => setTimeout(resolve, ms));
+
+    return {
+      id: command.id,
+      success: true,
+      data: { waited: ms },
+    };
+  } else if (waitType === 'element') {
+    // 等待元素出现
+    const ref = command.ref as string;
+    if (!ref) {
+      return {
+        id: command.id,
+        success: false,
+        error: 'Missing ref parameter',
+      };
+    }
+
+    // 获取当前活动标签页
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!activeTab || !activeTab.id) {
+      return {
+        id: command.id,
+        success: false,
+        error: 'No active tab found',
+      };
+    }
+
+    console.log('[CommandHandler] Waiting for element:', ref);
+
+    try {
+      await waitForElement(activeTab.id, ref);
+      return {
+        id: command.id,
+        success: true,
+        data: { ref },
+      };
+    } catch (error) {
+      console.error('[CommandHandler] Wait failed:', error);
+      return {
+        id: command.id,
+        success: false,
+        error: `Wait failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  } else {
+    return {
+      id: command.id,
+      success: false,
+      error: `Unknown wait type: ${waitType}`,
     };
   }
 }
