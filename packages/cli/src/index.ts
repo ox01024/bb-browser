@@ -19,6 +19,7 @@ import { openCommand } from "./commands/open.js";
 import { snapshotCommand } from "./commands/snapshot.js";
 import { clickCommand } from "./commands/click.js";
 import { fillCommand } from "./commands/fill.js";
+import { closeCommand } from "./commands/close.js";
 import { daemonCommand, stopCommand, statusCommand } from "./commands/daemon.js";
 import { reloadCommand } from "./commands/reload.js";
 
@@ -35,6 +36,7 @@ bb-browser - AI Agent 浏览器自动化工具
   snapshot          获取当前页面快照（默认完整树）
   click <ref>       点击元素（ref 如 @5 或 5）
   fill <ref> <text> 填充输入框
+  close             关闭当前标签页
   daemon            前台启动 Daemon
   start             前台启动 Daemon（daemon 的别名）
   stop              停止 Daemon
@@ -190,6 +192,11 @@ async function main(): Promise<void> {
 
       case "reload": {
         await reloadCommand({ json: parsed.flags.json });
+        break;
+      }
+
+      case "close": {
+        await closeCommand({ json: parsed.flags.json });
         break;
       }
 

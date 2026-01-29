@@ -33,6 +33,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
         result = await handleFill(command);
         break;
 
+      case 'close':
+        result = await handleClose(command);
+        break;
+
       default:
         result = {
           id: command.id,
@@ -242,6 +246,49 @@ async function handleFill(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Fill failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 close 命令 - 关闭当前标签页
+ */
+async function handleClose(command: CommandEvent): Promise<CommandResult> {
+  // 获取当前活动标签页
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  const tabId = activeTab.id;
+  const title = activeTab.title || '';
+  const url = activeTab.url || '';
+
+  console.log('[CommandHandler] Closing tab:', tabId, url);
+
+  try {
+    await chrome.tabs.remove(tabId);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        tabId,
+        title,
+        url,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Close failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Close failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
