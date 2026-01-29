@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "bb-browser",
+  "version": "0.1.0",
+  "description": "Browser automation for AI agents",
+  "permissions": ["tabs", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["buildDomTree.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
