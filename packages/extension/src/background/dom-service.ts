@@ -866,6 +866,135 @@ export async function typeElement(tabId: number, ref: string, text: string): Pro
 }
 
 /**
+ * 选择下拉框选项
+ * @param tabId 目标标签页 ID
+ * @param ref 元素 ref ID（如 "@5" 或 "5"）
+ * @param value 选项的 value 属性值或显示文本（label）
+ * @returns 被选中元素的信息
+ */
+export async function selectOption(
+  tabId: number,
+  ref: string,
+  value: string
+): Promise<{ role: string; name?: string; selectedValue: string; selectedLabel: string }> {
+  const refInfo = getRefInfo(ref);
+  if (!refInfo) {
+    throw new Error(`Ref "${ref}" not found. Run snapshot first to get available refs.`);
+  }
+
+  const { xpath, role, name } = refInfo;
+
+  // 使用 chrome.scripting.executeScript 注入选择代码
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (elementXpath: string, selectValue: string) => {
+      // 通过 XPath 定位元素
+      const result = document.evaluate(
+        elementXpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const element = result.singleNodeValue as HTMLElement | null;
+
+      if (!element) {
+        return { success: false, error: 'Element not found by xpath' };
+      }
+
+      // 检查是否是 select 元素
+      if (!(element instanceof HTMLSelectElement)) {
+        return { success: false, error: 'Element is not a <select> element' };
+      }
+
+      const selectEl = element;
+
+      // 滚动到元素可见
+      selectEl.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+
+      // 聚焦元素
+      selectEl.focus();
+
+      // 首先尝试通过 value 属性匹配
+      let matchedOption: HTMLOptionElement | null = null;
+      for (const option of Array.from(selectEl.options)) {
+        if (option.value === selectValue) {
+          matchedOption = option;
+          break;
+        }
+      }
+
+      // 如果 value 匹配失败，尝试通过 label（显示文本）匹配
+      if (!matchedOption) {
+        for (const option of Array.from(selectEl.options)) {
+          if (option.textContent?.trim() === selectValue) {
+            matchedOption = option;
+            break;
+          }
+        }
+      }
+
+      // 如果还是没找到，尝试不区分大小写匹配
+      if (!matchedOption) {
+        const lowerValue = selectValue.toLowerCase();
+        for (const option of Array.from(selectEl.options)) {
+          if (option.value.toLowerCase() === lowerValue || 
+              option.textContent?.trim().toLowerCase() === lowerValue) {
+            matchedOption = option;
+            break;
+          }
+        }
+      }
+
+      if (!matchedOption) {
+        // 收集可用选项供错误提示
+        const availableOptions = Array.from(selectEl.options).map(opt => ({
+          value: opt.value,
+          label: opt.textContent?.trim() || '',
+        }));
+        return { 
+          success: false, 
+          error: `Option "${selectValue}" not found. Available options: ${JSON.stringify(availableOptions)}` 
+        };
+      }
+
+      // 设置选中状态
+      selectEl.value = matchedOption.value;
+
+      // 触发 change 事件
+      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+      selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+      return { 
+        success: true, 
+        selectedValue: matchedOption.value,
+        selectedLabel: matchedOption.textContent?.trim() || matchedOption.value,
+      };
+    },
+    args: [xpath, value],
+  });
+
+  const result = results[0]?.result as { 
+    success: boolean; 
+    error?: string; 
+    selectedValue?: string;
+    selectedLabel?: string;
+  } | undefined;
+  
+  if (!result?.success) {
+    throw new Error(result?.error || 'Failed to select option');
+  }
+
+  console.log('[DOMService] Selected option:', { ref, role, name, selectedValue: result.selectedValue });
+  return { 
+    role, 
+    name, 
+    selectedValue: result.selectedValue!, 
+    selectedLabel: result.selectedLabel! 
+  };
+}
+
+/**
  * 获取元素文本内容
  * @param tabId 目标标签页 ID
  * @param ref 元素 ref ID（如 "@5" 或 "5"）

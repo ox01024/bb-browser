@@ -5,7 +5,7 @@
 
 import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
-import { getSnapshot, clickElement, hoverElement, fillElement, typeElement, getElementText, waitForElement, checkElement, uncheckElement } from './dom-service';
+import { getSnapshot, clickElement, hoverElement, fillElement, typeElement, getElementText, waitForElement, checkElement, uncheckElement, selectOption } from './dom-service';
 
 /**
  * 处理收到的命令
@@ -87,6 +87,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
 
       case 'eval':
         result = await handleEval(command);
+        break;
+
+      case 'select':
+        result = await handleSelect(command);
         break;
 
       default:
@@ -502,6 +506,65 @@ async function handleUncheck(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Uncheck failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 select 命令 - 下拉框选择
+ */
+async function handleSelect(command: CommandEvent): Promise<CommandResult> {
+  const ref = command.ref as string;
+  const value = command.value as string;
+
+  if (!ref) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing ref parameter',
+    };
+  }
+
+  if (value === undefined || value === null) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing value parameter',
+    };
+  }
+
+  // 获取当前活动标签页
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Selecting option:', ref, 'value:', value);
+
+  try {
+    const result = await selectOption(activeTab.id, ref, value);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        role: result.role,
+        name: result.name,
+        selectedValue: result.selectedValue,
+        selectedLabel: result.selectedLabel,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Select failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Select failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

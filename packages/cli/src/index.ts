@@ -31,6 +31,8 @@ import { daemonCommand, stopCommand, statusCommand } from "./commands/daemon.js"
 import { reloadCommand } from "./commands/reload.js";
 import { backCommand, forwardCommand, refreshCommand } from "./commands/nav.js";
 import { checkCommand, uncheckCommand } from "./commands/check.js";
+import { selectCommand } from "./commands/select.js";
+import { evalCommand } from "./commands/eval.js";
 
 const VERSION = "0.0.1";
 
@@ -49,6 +51,8 @@ bb-browser - AI Agent 浏览器自动化工具
   type <ref> <text> 逐字符输入（不清空）
   check <ref>       勾选复选框
   uncheck <ref>     取消勾选复选框
+  select <ref> <val> 下拉框选择
+  eval "<js>"       执行 JavaScript
   close             关闭当前标签页
   get text <ref>    获取元素文本
   get url           获取当前页面 URL
@@ -254,6 +258,37 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await typeCommand(ref, text, { json: parsed.flags.json });
+        break;
+      }
+
+      case "select": {
+        const ref = parsed.args[0];
+        const value = parsed.args[1];
+        if (!ref) {
+          console.error("错误：缺少 ref 参数");
+          console.error("用法：bb-browser select <ref> <value>");
+          console.error('示例：bb-browser select @4 "option1"');
+          process.exit(1);
+        }
+        if (value === undefined) {
+          console.error("错误：缺少 value 参数");
+          console.error("用法：bb-browser select <ref> <value>");
+          console.error('示例：bb-browser select @4 "option1"');
+          process.exit(1);
+        }
+        await selectCommand(ref, value, { json: parsed.flags.json });
+        break;
+      }
+
+      case "eval": {
+        const script = parsed.args[0];
+        if (!script) {
+          console.error("错误：缺少 script 参数");
+          console.error("用法：bb-browser eval <script>");
+          console.error('示例：bb-browser eval "document.title"');
+          process.exit(1);
+        }
+        await evalCommand(script, { json: parsed.flags.json });
         break;
       }
 

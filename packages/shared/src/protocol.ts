@@ -7,10 +7,21 @@ export type ActionType =
   | "open"
   | "snapshot"
   | "click"
+  | "hover"
   | "fill"
+  | "type"
+  | "check"
+  | "uncheck"
+  | "select"
   | "get"
   | "screenshot"
   | "close"
+  | "wait"
+  | "press"
+  | "scroll"
+  | "back"
+  | "forward"
+  | "refresh"
   | "eval";
 
 /** 请求类型 */
@@ -33,6 +44,8 @@ export interface Request {
   interactive?: boolean;
   /** JavaScript 代码（eval 命令使用） */
   script?: string;
+  /** 选项值（select 命令使用） */
+  value?: string;
 }
 
 /** 元素引用信息 */
