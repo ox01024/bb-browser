@@ -1,11 +1,17 @@
 /**
  * Command Handler for bb-browser Extension
  * 处理从 Daemon 接收的命令
+ * 
+ * v2.0: 使用 CDP (chrome.debugger) 实现所有 DOM 操作
  */
 
 import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
-import { getSnapshot, clickElement, hoverElement, fillElement, typeElement, getElementText, waitForElement, checkElement, uncheckElement, selectOption, setActiveFrameId } from './dom-service';
+import * as cdp from './cdp-service';
+import * as cdpDom from './cdp-dom-service';
+
+// 初始化 CDP 事件监听器
+cdp.initEventListeners();
 
 /**
  * 当前活动 Frame 的 frameId
@@ -194,7 +200,7 @@ async function handleOpen(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 snapshot 命令 - 获取页面快照
- * 使用 DOM Service 注入 buildDomTree 脚本并获取可访问性树
+ * v2.0: 使用 CDP Accessibility.getFullAXTree 获取可访问性树
  */
 async function handleSnapshot(command: CommandEvent): Promise<CommandResult> {
   // 获取当前活动标签页
@@ -224,8 +230,8 @@ async function handleSnapshot(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Taking snapshot of tab:', activeTab.id, activeTab.url, { interactive });
 
   try {
-    // 使用 DOM Service 获取快照
-    const snapshotResult = await getSnapshot(activeTab.id, { interactive });
+    // v2.0: 使用 CDP DOM Service 获取快照
+    const snapshotResult = await cdpDom.getSnapshot(activeTab.id, { interactive });
 
     return {
       id: command.id,
@@ -248,6 +254,7 @@ async function handleSnapshot(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 click 命令 - 点击元素
+ * v2.0: 使用 CDP Input.dispatchMouseEvent
  */
 async function handleClick(command: CommandEvent): Promise<CommandResult> {
   const ref = command.ref as string;
@@ -274,7 +281,8 @@ async function handleClick(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Clicking element:', ref);
 
   try {
-    const elementInfo = await clickElement(activeTab.id, ref);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.clickElement(activeTab.id, ref);
 
     return {
       id: command.id,
@@ -296,6 +304,7 @@ async function handleClick(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 hover 命令 - 悬停在元素上
+ * v2.0: 使用 CDP Input.dispatchMouseEvent
  */
 async function handleHover(command: CommandEvent): Promise<CommandResult> {
   const ref = command.ref as string;
@@ -322,7 +331,8 @@ async function handleHover(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Hovering element:', ref);
 
   try {
-    const elementInfo = await hoverElement(activeTab.id, ref);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.hoverElement(activeTab.id, ref);
 
     return {
       id: command.id,
@@ -379,7 +389,8 @@ async function handleFill(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Filling element:', ref, 'with text length:', text.length);
 
   try {
-    const elementInfo = await fillElement(activeTab.id, ref, text);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.fillElement(activeTab.id, ref, text);
 
     return {
       id: command.id,
@@ -402,6 +413,7 @@ async function handleFill(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 type 命令 - 逐字符输入文本（不清空原有内容）
+ * v2.0: 使用 CDP Input.dispatchKeyEvent
  */
 async function handleType(command: CommandEvent): Promise<CommandResult> {
   const ref = command.ref as string;
@@ -437,7 +449,8 @@ async function handleType(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Typing in element:', ref, 'text length:', text.length);
 
   try {
-    const elementInfo = await typeElement(activeTab.id, ref, text);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.typeElement(activeTab.id, ref, text);
 
     return {
       id: command.id,
@@ -486,7 +499,8 @@ async function handleCheck(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Checking element:', ref);
 
   try {
-    const elementInfo = await checkElement(activeTab.id, ref);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.checkElement(activeTab.id, ref);
 
     return {
       id: command.id,
@@ -509,6 +523,7 @@ async function handleCheck(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 uncheck 命令 - 取消勾选复选框
+ * v2.0: 使用 CDP Runtime.callFunctionOn
  */
 async function handleUncheck(command: CommandEvent): Promise<CommandResult> {
   const ref = command.ref as string;
@@ -535,7 +550,8 @@ async function handleUncheck(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Unchecking element:', ref);
 
   try {
-    const elementInfo = await uncheckElement(activeTab.id, ref);
+    // v2.0: 使用 CDP DOM Service
+    const elementInfo = await cdpDom.uncheckElement(activeTab.id, ref);
 
     return {
       id: command.id,
@@ -558,6 +574,7 @@ async function handleUncheck(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 select 命令 - 下拉框选择
+ * v2.0: 使用 CDP Runtime.callFunctionOn
  */
 async function handleSelect(command: CommandEvent): Promise<CommandResult> {
   const ref = command.ref as string;
@@ -593,7 +610,8 @@ async function handleSelect(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Selecting option:', ref, 'value:', value);
 
   try {
-    const result = await selectOption(activeTab.id, ref, value);
+    // v2.0: 使用 CDP DOM Service
+    const result = await cdpDom.selectOption(activeTab.id, ref, value);
 
     return {
       id: command.id,
@@ -706,7 +724,8 @@ async function handleGet(command: CommandEvent): Promise<CommandResult> {
             error: 'Missing ref parameter for get text',
           };
         }
-        value = await getElementText(activeTab.id, ref);
+        // v2.0: 使用 CDP DOM Service
+        value = await cdpDom.getElementText(activeTab.id, ref);
         break;
       }
 
@@ -825,7 +844,8 @@ async function handleWait(command: CommandEvent): Promise<CommandResult> {
     console.log('[CommandHandler] Waiting for element:', ref);
 
     try {
-      await waitForElement(activeTab.id, ref);
+      // v2.0: 使用 CDP DOM Service
+      await cdpDom.waitForElement(activeTab.id, ref);
       return {
         id: command.id,
         success: true,
@@ -887,34 +907,8 @@ async function handlePress(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Pressing key:', key, 'modifiers:', modifiers);
 
   try {
-    // 使用 content script 模拟键盘事件
-    await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      func: (key: string, modifiers: string[]) => {
-        const el = document.activeElement || document.body;
-        
-        const eventInit: KeyboardEventInit = {
-          key,
-          code: key,
-          bubbles: true,
-          cancelable: true,
-          ctrlKey: modifiers.includes('Control'),
-          altKey: modifiers.includes('Alt'),
-          shiftKey: modifiers.includes('Shift'),
-          metaKey: modifiers.includes('Meta'),
-        };
-
-        // 发送 keydown 和 keyup 事件
-        el.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-        el.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-
-        // 对于 Enter 键，额外触发 keypress 事件（某些网站需要）
-        if (key === 'Enter') {
-          el.dispatchEvent(new KeyboardEvent('keypress', eventInit));
-        }
-      },
-      args: [key, modifiers],
-    });
+    // v2.0: 使用 CDP DOM Service
+    await cdpDom.pressKey(activeTab.id, key, modifiers);
 
     const displayKey = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key;
 
@@ -937,6 +931,7 @@ async function handlePress(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 scroll 命令 - 滚动页面
+ * v2.0: 使用 CDP Input.dispatchMouseEvent (wheel)
  */
 async function handleScroll(command: CommandEvent): Promise<CommandResult> {
   const direction = command.direction as string;
@@ -972,18 +967,8 @@ async function handleScroll(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Scrolling:', direction, pixels, 'px');
 
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      func: (dir: string, px: number) => {
-        switch (dir) {
-          case 'up': window.scrollBy(0, -px); break;
-          case 'down': window.scrollBy(0, px); break;
-          case 'left': window.scrollBy(-px, 0); break;
-          case 'right': window.scrollBy(px, 0); break;
-        }
-      },
-      args: [direction, pixels],
-    });
+    // v2.0: 使用 CDP DOM Service
+    await cdpDom.scrollPage(activeTab.id, direction as 'up' | 'down' | 'left' | 'right', pixels);
 
     return {
       id: command.id,
@@ -1005,7 +990,7 @@ async function handleScroll(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 back 命令 - 后退
- * 使用 CDP Page.navigateToHistoryEntry 或 history.back()
+ * v2.0: 使用 CDP Runtime.evaluate
  */
 async function handleBack(command: CommandEvent): Promise<CommandResult> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1022,17 +1007,11 @@ async function handleBack(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Going back in tab:', tabId);
 
   try {
-    // 使用 CDP 执行 history.back()
-    await ensureDebuggerAttached(tabId);
-    
+    // v2.0: 使用 CDP Service
     // 先检查是否可以后退
-    const historyResult = await chrome.debugger.sendCommand(
-      { tabId },
-      'Runtime.evaluate',
-      { expression: 'window.history.length > 1', returnByValue: true }
-    ) as { result?: { value?: boolean } };
+    const canGoBack = await cdp.evaluate(tabId, 'window.history.length > 1');
     
-    if (!historyResult.result?.value) {
+    if (!canGoBack) {
       return {
         id: command.id,
         success: false,
@@ -1041,13 +1020,9 @@ async function handleBack(command: CommandEvent): Promise<CommandResult> {
     }
     
     // 执行后退
-    await chrome.debugger.sendCommand(
-      { tabId },
-      'Runtime.evaluate',
-      { expression: 'window.history.back()' }
-    );
+    await cdp.evaluate(tabId, 'window.history.back()');
     
-    // 等待页面加载（使用简单延时，因为 back 不会触发 chrome.tabs.onUpdated）
+    // 等待页面加载
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     const updatedTab = await chrome.tabs.get(tabId);
@@ -1072,7 +1047,7 @@ async function handleBack(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 forward 命令 - 前进
- * 使用 CDP 执行 history.forward()
+ * v2.0: 使用 CDP Runtime.evaluate
  */
 async function handleForward(command: CommandEvent): Promise<CommandResult> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1089,17 +1064,10 @@ async function handleForward(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Going forward in tab:', tabId);
 
   try {
-    // 使用 CDP 执行 history.forward()
-    await ensureDebuggerAttached(tabId);
+    // v2.0: 使用 CDP Service
+    await cdp.evaluate(tabId, 'window.history.forward()');
     
-    // 执行前进
-    await chrome.debugger.sendCommand(
-      { tabId },
-      'Runtime.evaluate',
-      { expression: 'window.history.forward()' }
-    );
-    
-    // 等待页面加载（使用简单延时，因为 forward 不会触发 chrome.tabs.onUpdated）
+    // 等待页面加载
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     const updatedTab = await chrome.tabs.get(tabId);
@@ -1163,6 +1131,7 @@ async function handleRefresh(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 eval 命令 - 在页面执行 JavaScript
+ * v2.0: 使用 CDP Runtime.evaluate
  */
 async function handleEval(command: CommandEvent): Promise<CommandResult> {
   const script = command.script as string;
@@ -1201,39 +1170,10 @@ async function handleEval(command: CommandEvent): Promise<CommandResult> {
   const tabId = activeTab.id;
 
   try {
-    // 使用 chrome.debugger API 的 Runtime.evaluate 来执行任意 JavaScript
-    // 这绕过了 MV3 的 CSP 限制（禁止 eval）
-    await ensureDebuggerAttached(tabId);
+    // v2.0: 使用 CDP Service
+    const result = await cdp.evaluate(tabId, script);
 
-    // 使用 CDP 的 Runtime.evaluate
-    const evalResult = await chrome.debugger.sendCommand(
-      { tabId },
-      'Runtime.evaluate',
-      {
-        expression: script,
-        returnByValue: true,  // 返回实际值而不是远程对象引用
-        awaitPromise: true,   // 如果是 Promise，等待它完成
-      }
-    ) as {
-      result?: { type: string; value?: unknown; description?: string };
-      exceptionDetails?: { exception?: { description?: string }; text?: string };
-    };
-
-    console.log('[CommandHandler] Eval result:', JSON.stringify(evalResult));
-
-    // 检查是否有异常
-    if (evalResult.exceptionDetails) {
-      const errorMsg = evalResult.exceptionDetails.exception?.description 
-        || evalResult.exceptionDetails.text 
-        || 'Unknown error';
-      return {
-        id: command.id,
-        success: false,
-        error: `Eval error: ${errorMsg}`,
-      };
-    }
-
-    const result = evalResult.result?.value;
+    console.log('[CommandHandler] Eval result:', JSON.stringify(result));
 
     return {
       id: command.id,
@@ -1252,91 +1192,7 @@ async function handleEval(command: CommandEvent): Promise<CommandResult> {
   }
 }
 
-/**
- * Dialog 状态管理
- * 存储每个 tab 的待处理 dialog 信息
- */
-interface PendingDialog {
-  url: string;
-  message: string;
-  type: 'alert' | 'confirm' | 'prompt' | 'beforeunload';
-  defaultPrompt?: string;
-  hasBrowserHandler: boolean;
-}
-
-// 每个 tab 的待处理 dialog
-const pendingDialogs: Map<number, PendingDialog> = new Map();
-
-// 已 attach debugger 的 tab
-const debuggerAttachedTabs: Set<number> = new Set();
-
-/**
- * 处理 debugger 事件
- */
-function onDebuggerEvent(
-  source: chrome.debugger.Debuggee,
-  method: string,
-  params?: object
-): void {
-  if (method === 'Page.javascriptDialogOpening' && source.tabId) {
-    const dialogParams = params as {
-      url: string;
-      message: string;
-      type: 'alert' | 'confirm' | 'prompt' | 'beforeunload';
-      defaultPrompt?: string;
-      hasBrowserHandler: boolean;
-    };
-    console.log('[CommandHandler] Dialog opened:', dialogParams);
-    pendingDialogs.set(source.tabId, dialogParams);
-  } else if (method === 'Page.javascriptDialogClosed' && source.tabId) {
-    console.log('[CommandHandler] Dialog closed');
-    pendingDialogs.delete(source.tabId);
-  }
-}
-
-// 注册全局 debugger 事件监听器
-chrome.debugger.onEvent.addListener(onDebuggerEvent);
-
-// 当 tab 关闭时清理状态
-chrome.tabs.onRemoved.addListener((tabId) => {
-  pendingDialogs.delete(tabId);
-  if (debuggerAttachedTabs.has(tabId)) {
-    debuggerAttachedTabs.delete(tabId);
-  }
-});
-
-// 当 debugger 被 detach 时清理状态
-chrome.debugger.onDetach.addListener((source) => {
-  if (source.tabId) {
-    debuggerAttachedTabs.delete(source.tabId);
-    pendingDialogs.delete(source.tabId);
-  }
-});
-
-/**
- * 确保 debugger 已附加到 tab
- */
-async function ensureDebuggerAttached(tabId: number): Promise<void> {
-  if (debuggerAttachedTabs.has(tabId)) {
-    return;
-  }
-
-  try {
-    await chrome.debugger.attach({ tabId }, '1.3');
-    debuggerAttachedTabs.add(tabId);
-    
-    // 启用 Page 域以接收 dialog 事件
-    await chrome.debugger.sendCommand({ tabId }, 'Page.enable');
-    console.log('[CommandHandler] Debugger attached to tab:', tabId);
-  } catch (error) {
-    // 如果已经 attached，忽略错误
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (!errorMessage.includes('Another debugger is already attached')) {
-      throw error;
-    }
-    debuggerAttachedTabs.add(tabId);
-  }
-}
+// v2.0: 状态管理已移到 cdp-service.ts
 
 /**
  * 处理 tab_list 命令 - 列出所有标签页
@@ -1681,9 +1537,9 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
       };
     }
 
-    // 5. 保存 activeFrameId 并同步到 dom-service
+    // 5. 保存 activeFrameId 并同步到 cdp-dom-service
     activeFrameId = targetFrameId;
-    setActiveFrameId(targetFrameId);
+    cdpDom.setActiveFrameId(String(targetFrameId));
 
     const matchedFrameInfo = frames.find(f => f.frameId === targetFrameId);
 
@@ -1715,9 +1571,9 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
 async function handleFrameMain(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Switching to main frame');
 
-  // 重置 activeFrameId 并同步到 dom-service
+  // 重置 activeFrameId 并同步到 cdp-dom-service
   activeFrameId = null;
-  setActiveFrameId(null);
+  cdpDom.setActiveFrameId(null);
 
   return {
     id: command.id,
@@ -1732,6 +1588,7 @@ async function handleFrameMain(command: CommandEvent): Promise<CommandResult> {
 
 /**
  * 处理 dialog 命令 - 接受或拒绝对话框
+ * v2.0: 使用 CDP Page.handleJavaScriptDialog
  */
 async function handleDialog(command: CommandEvent): Promise<CommandResult> {
   const dialogResponse = command.dialogResponse as 'accept' | 'dismiss';
@@ -1761,11 +1618,8 @@ async function handleDialog(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Handling dialog:', dialogResponse, 'promptText:', promptText);
 
   try {
-    // 确保 debugger 已附加
-    await ensureDebuggerAttached(tabId);
-
-    // 检查是否有待处理的 dialog
-    const pendingDialog = pendingDialogs.get(tabId);
+    // v2.0: 使用 CDP Service
+    const pendingDialog = cdp.getPendingDialog(tabId);
 
     if (!pendingDialog) {
       return {
@@ -1776,19 +1630,18 @@ async function handleDialog(command: CommandEvent): Promise<CommandResult> {
     }
 
     // 处理 dialog
-    await chrome.debugger.sendCommand({ tabId }, 'Page.handleJavaScriptDialog', {
-      accept: dialogResponse === 'accept',
-      promptText: dialogResponse === 'accept' ? promptText : undefined,
-    });
+    await cdp.handleJavaScriptDialog(
+      tabId,
+      dialogResponse === 'accept',
+      dialogResponse === 'accept' ? promptText : undefined
+    );
 
-    // 获取 dialog 信息后清理
+    // 获取 dialog 信息
     const dialogInfo = {
       type: pendingDialog.type,
       message: pendingDialog.message,
       handled: true,
     };
-
-    pendingDialogs.delete(tabId);
 
     return {
       id: command.id,
