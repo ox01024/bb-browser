@@ -61,6 +61,18 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
         result = await handleScroll(command);
         break;
 
+      case 'back':
+        result = await handleBack(command);
+        break;
+
+      case 'forward':
+        result = await handleForward(command);
+        break;
+
+      case 'refresh':
+        result = await handleRefresh(command);
+        break;
+
       default:
         result = {
           id: command.id,
@@ -706,6 +718,123 @@ async function handleScroll(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Scroll failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 back 命令 - 后退
+ */
+async function handleBack(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Going back in tab:', activeTab.id);
+
+  try {
+    await chrome.tabs.goBack(activeTab.id);
+    await waitForTabLoad(activeTab.id);
+    const updatedTab = await chrome.tabs.get(activeTab.id);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        url: updatedTab.url || '',
+        title: updatedTab.title || '',
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Back failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Back failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 forward 命令 - 前进
+ */
+async function handleForward(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Going forward in tab:', activeTab.id);
+
+  try {
+    await chrome.tabs.goForward(activeTab.id);
+    await waitForTabLoad(activeTab.id);
+    const updatedTab = await chrome.tabs.get(activeTab.id);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        url: updatedTab.url || '',
+        title: updatedTab.title || '',
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Forward failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Forward failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 refresh 命令 - 刷新页面
+ */
+async function handleRefresh(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Refreshing tab:', activeTab.id);
+
+  try {
+    await chrome.tabs.reload(activeTab.id);
+    await waitForTabLoad(activeTab.id);
+    const updatedTab = await chrome.tabs.get(activeTab.id);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        url: updatedTab.url || '',
+        title: updatedTab.title || '',
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Refresh failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Refresh failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
