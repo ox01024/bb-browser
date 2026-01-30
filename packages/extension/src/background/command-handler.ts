@@ -5,7 +5,7 @@
 
 import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
-import { getSnapshot, clickElement, fillElement, getElementText, waitForElement } from './dom-service';
+import { getSnapshot, clickElement, hoverElement, fillElement, getElementText, waitForElement } from './dom-service';
 
 /**
  * 处理收到的命令
@@ -27,6 +27,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
 
       case 'click':
         result = await handleClick(command);
+        break;
+
+      case 'hover':
+        result = await handleHover(command);
         break;
 
       case 'fill':
@@ -208,6 +212,54 @@ async function handleClick(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Click failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 hover 命令 - 悬停在元素上
+ */
+async function handleHover(command: CommandEvent): Promise<CommandResult> {
+  const ref = command.ref as string;
+
+  if (!ref) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing ref parameter',
+    };
+  }
+
+  // 获取当前活动标签页
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Hovering element:', ref);
+
+  try {
+    const elementInfo = await hoverElement(activeTab.id, ref);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        role: elementInfo.role,
+        name: elementInfo.name,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Hover failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Hover failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

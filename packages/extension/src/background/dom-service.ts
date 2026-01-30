@@ -640,6 +640,59 @@ export async function clickElement(tabId: number, ref: string): Promise<{ role: 
 }
 
 /**
+ * 悬停在元素上
+ * @param tabId 目标标签页 ID
+ * @param ref 元素 ref ID（如 "@5" 或 "5"）
+ * @returns 被悬停元素的 role 和 name
+ */
+export async function hoverElement(tabId: number, ref: string): Promise<{ role: string; name?: string }> {
+  const refInfo = getRefInfo(ref);
+  if (!refInfo) {
+    throw new Error(`Ref "${ref}" not found. Run snapshot first to get available refs.`);
+  }
+
+  const { xpath, role, name } = refInfo;
+
+  // 使用 chrome.scripting.executeScript 注入悬停代码
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (elementXpath: string) => {
+      // 通过 XPath 定位元素
+      const result = document.evaluate(
+        elementXpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const element = result.singleNodeValue as HTMLElement | null;
+
+      if (!element) {
+        return { success: false, error: 'Element not found by xpath' };
+      }
+
+      // 滚动到元素可见
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+      // 触发悬停事件
+      element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+
+      return { success: true };
+    },
+    args: [xpath],
+  });
+
+  const result = results[0]?.result as { success: boolean; error?: string } | undefined;
+  if (!result?.success) {
+    throw new Error(result?.error || 'Failed to hover element');
+  }
+
+  console.log('[DOMService] Hovered element:', { ref, role, name });
+  return { role, name };
+}
+
+/**
  * 填充输入框
  * @param tabId 目标标签页 ID
  * @param ref 元素 ref ID（如 "@5" 或 "5"）
