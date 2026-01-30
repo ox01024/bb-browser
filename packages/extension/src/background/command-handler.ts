@@ -49,6 +49,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
         result = await handleWait(command);
         break;
 
+      case 'press':
+        result = await handlePress(command);
+        break;
+
       default:
         result = {
           id: command.id,
@@ -491,6 +495,93 @@ async function handleWait(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Unknown wait type: ${waitType}`,
+    };
+  }
+}
+
+/**
+ * 处理 press 命令 - 发送键盘按键
+ */
+async function handlePress(command: CommandEvent): Promise<CommandResult> {
+  const key = command.key as string;
+  const modifiers = (command.modifiers as string[]) || [];
+
+  if (!key) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing key parameter',
+    };
+  }
+
+  // 获取当前活动标签页
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  // 检查是否是特殊页面
+  const url = activeTab.url || '';
+  if (url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('chrome-extension://')) {
+    return {
+      id: command.id,
+      success: false,
+      error: `Cannot send keys to restricted page: ${url}`,
+    };
+  }
+
+  console.log('[CommandHandler] Pressing key:', key, 'modifiers:', modifiers);
+
+  try {
+    // 使用 content script 模拟键盘事件
+    await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      func: (key: string, modifiers: string[]) => {
+        const el = document.activeElement || document.body;
+        
+        const eventInit: KeyboardEventInit = {
+          key,
+          code: key,
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: modifiers.includes('Control'),
+          altKey: modifiers.includes('Alt'),
+          shiftKey: modifiers.includes('Shift'),
+          metaKey: modifiers.includes('Meta'),
+        };
+
+        // 发送 keydown 和 keyup 事件
+        el.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+        el.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+
+        // 对于 Enter 键，额外触发 keypress 事件（某些网站需要）
+        if (key === 'Enter') {
+          el.dispatchEvent(new KeyboardEvent('keypress', eventInit));
+        }
+      },
+      args: [key, modifiers],
+    });
+
+    const displayKey = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key;
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        key: displayKey,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Press failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Press failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

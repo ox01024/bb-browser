@@ -23,6 +23,7 @@ import { closeCommand } from "./commands/close.js";
 import { getCommand, type GetAttribute } from "./commands/get.js";
 import { screenshotCommand } from "./commands/screenshot.js";
 import { waitCommand } from "./commands/wait.js";
+import { pressCommand } from "./commands/press.js";
 import { daemonCommand, stopCommand, statusCommand } from "./commands/daemon.js";
 import { reloadCommand } from "./commands/reload.js";
 
@@ -45,6 +46,7 @@ bb-browser - AI Agent 浏览器自动化工具
   get title         获取页面标题
   screenshot [path] 截取当前页面
   wait <ms|@ref>    等待时间或元素
+  press <key>       发送键盘按键（如 Enter, Tab, Control+a）
   daemon            前台启动 Daemon
   start             前台启动 Daemon（daemon 的别名）
   stop              停止 Daemon
@@ -64,6 +66,8 @@ bb-browser - AI Agent 浏览器自动化工具
   bb-browser fill @3 "hello world"
   bb-browser get text @5
   bb-browser get url
+  bb-browser press Enter
+  bb-browser press Control+a
   bb-browser daemon
   bb-browser stop
 `.trim();
@@ -245,6 +249,19 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await waitCommand(target, { json: parsed.flags.json });
+        break;
+      }
+
+      case "press": {
+        const key = parsed.args[0];
+        if (!key) {
+          console.error("错误：缺少 key 参数");
+          console.error("用法：bb-browser press <key>");
+          console.error("示例：bb-browser press Enter");
+          console.error("      bb-browser press Control+a");
+          process.exit(1);
+        }
+        await pressCommand(key, { json: parsed.flags.json });
         break;
       }
 
