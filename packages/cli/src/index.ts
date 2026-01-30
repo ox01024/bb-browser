@@ -18,6 +18,7 @@
 import { openCommand } from "./commands/open.js";
 import { snapshotCommand } from "./commands/snapshot.js";
 import { clickCommand } from "./commands/click.js";
+import { hoverCommand } from "./commands/hover.js";
 import { fillCommand } from "./commands/fill.js";
 import { closeCommand } from "./commands/close.js";
 import { getCommand, type GetAttribute } from "./commands/get.js";
@@ -38,6 +39,7 @@ bb-browser - AI Agent 浏览器自动化工具
   open <url>        打开指定 URL
   snapshot          获取当前页面快照（默认完整树）
   click <ref>       点击元素（ref 如 @5 或 5）
+  hover <ref>       悬停在元素上
   fill <ref> <text> 填充输入框
   close             关闭当前标签页
   get text <ref>    获取元素文本
@@ -162,6 +164,18 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await clickCommand(ref, { json: parsed.flags.json });
+        break;
+      }
+
+      case "hover": {
+        const ref = parsed.args[0];
+        if (!ref) {
+          console.error("错误：缺少 ref 参数");
+          console.error("用法：bb-browser hover <ref>");
+          console.error("示例：bb-browser hover @5");
+          process.exit(1);
+        }
+        await hoverCommand(ref, { json: parsed.flags.json });
         break;
       }
 
