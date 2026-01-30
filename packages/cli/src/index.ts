@@ -25,6 +25,7 @@ import { screenshotCommand } from "./commands/screenshot.js";
 import { waitCommand } from "./commands/wait.js";
 import { daemonCommand, stopCommand, statusCommand } from "./commands/daemon.js";
 import { reloadCommand } from "./commands/reload.js";
+import { backCommand, forwardCommand, refreshCommand } from "./commands/nav.js";
 
 const VERSION = "0.0.1";
 
@@ -50,6 +51,9 @@ bb-browser - AI Agent 浏览器自动化工具
   stop              停止 Daemon
   status            查看 Daemon 状态
   reload            重载扩展（需要 CDP 模式）
+  back              后退
+  forward           前进
+  refresh           刷新页面
 
 选项：
   --json          以 JSON 格式输出
@@ -226,6 +230,21 @@ async function main(): Promise<void> {
 
       case "close": {
         await closeCommand({ json: parsed.flags.json });
+        break;
+      }
+
+      case "back": {
+        await backCommand({ json: parsed.flags.json });
+        break;
+      }
+
+      case "forward": {
+        await forwardCommand({ json: parsed.flags.json });
+        break;
+      }
+
+      case "refresh": {
+        await refreshCommand({ json: parsed.flags.json });
         break;
       }
 
