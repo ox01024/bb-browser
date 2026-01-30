@@ -20,6 +20,7 @@ import { snapshotCommand } from "./commands/snapshot.js";
 import { clickCommand } from "./commands/click.js";
 import { hoverCommand } from "./commands/hover.js";
 import { fillCommand } from "./commands/fill.js";
+import { typeCommand } from "./commands/type.js";
 import { closeCommand } from "./commands/close.js";
 import { getCommand, type GetAttribute } from "./commands/get.js";
 import { screenshotCommand } from "./commands/screenshot.js";
@@ -43,7 +44,8 @@ bb-browser - AI Agent 浏览器自动化工具
   snapshot          获取当前页面快照（默认完整树）
   click <ref>       点击元素（ref 如 @5 或 5）
   hover <ref>       悬停在元素上
-  fill <ref> <text> 填充输入框
+  fill <ref> <text> 填充输入框（清空后填入）
+  type <ref> <text> 逐字符输入（不清空）
   close             关闭当前标签页
   get text <ref>    获取元素文本
   get url           获取当前页面 URL
@@ -72,6 +74,7 @@ bb-browser - AI Agent 浏览器自动化工具
   bb-browser snapshot --json
   bb-browser click @5
   bb-browser fill @3 "hello world"
+  bb-browser type @3 "append text"
   bb-browser get text @5
   bb-browser get url
   bb-browser press Enter
@@ -205,6 +208,25 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await fillCommand(ref, text, { json: parsed.flags.json });
+        break;
+      }
+
+      case "type": {
+        const ref = parsed.args[0];
+        const text = parsed.args[1];
+        if (!ref) {
+          console.error("错误：缺少 ref 参数");
+          console.error("用法：bb-browser type <ref> <text>");
+          console.error('示例：bb-browser type @3 "append text"');
+          process.exit(1);
+        }
+        if (text === undefined) {
+          console.error("错误：缺少 text 参数");
+          console.error("用法：bb-browser type <ref> <text>");
+          console.error('示例：bb-browser type @3 "append text"');
+          process.exit(1);
+        }
+        await typeCommand(ref, text, { json: parsed.flags.json });
         break;
       }
 
