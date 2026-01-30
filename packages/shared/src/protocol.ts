@@ -29,7 +29,10 @@ export type ActionType =
   | "tab_close"
   | "frame"
   | "frame_main"
-  | "dialog";
+  | "dialog"
+  | "network"
+  | "console"
+  | "errors";
 
 /** 请求类型 */
 export interface Request {
@@ -61,6 +64,21 @@ export interface Request {
   dialogResponse?: "accept" | "dismiss";
   /** prompt 对话框的输入文本（dialog accept 时可选） */
   promptText?: string;
+  /** network 子命令：requests, route, unroute, clear */
+  networkCommand?: "requests" | "route" | "unroute" | "clear";
+  /** network route 选项 */
+  routeOptions?: {
+    abort?: boolean;
+    body?: string;
+    status?: number;
+    headers?: Record<string, string>;
+  };
+  /** 过滤字符串（network requests, console 使用） */
+  filter?: string;
+  /** console 子命令：get, clear */
+  consoleCommand?: "get" | "clear";
+  /** errors 子命令：get, clear */
+  errorsCommand?: "get" | "clear";
 }
 
 /** 元素引用信息 */
@@ -95,6 +113,38 @@ export interface SnapshotData {
   snapshot: string;
   /** 元素引用映射，key 为 ref ID */
   refs: Record<string, RefInfo>;
+}
+
+/** 网络请求信息 */
+export interface NetworkRequestInfo {
+  requestId: string;
+  url: string;
+  method: string;
+  type: string;
+  timestamp: number;
+  status?: number;
+  statusText?: string;
+  failed?: boolean;
+  failureReason?: string;
+}
+
+/** 控制台消息 */
+export interface ConsoleMessageInfo {
+  type: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  text: string;
+  timestamp: number;
+  url?: string;
+  lineNumber?: number;
+}
+
+/** JS 错误信息 */
+export interface JSErrorInfo {
+  message: string;
+  url?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+  stackTrace?: string;
+  timestamp: number;
 }
 
 /** 响应数据 */
@@ -137,6 +187,14 @@ export interface ResponseData {
     /** 是否成功处理 */
     handled: boolean;
   };
+  /** 网络请求列表（network requests 命令返回） */
+  networkRequests?: NetworkRequestInfo[];
+  /** 网络路由规则数量（network route/unroute 命令返回） */
+  routeCount?: number;
+  /** 控制台消息列表（console 命令返回） */
+  consoleMessages?: ConsoleMessageInfo[];
+  /** JS 错误列表（errors 命令返回） */
+  jsErrors?: JSErrorInfo[];
 }
 
 /** 响应类型 */

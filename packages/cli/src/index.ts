@@ -36,6 +36,9 @@ import { evalCommand } from "./commands/eval.js";
 import { tabCommand } from "./commands/tab.js";
 import { frameCommand, frameMainCommand } from "./commands/frame.js";
 import { dialogCommand } from "./commands/dialog.js";
+import { networkCommand } from "./commands/network.js";
+import { consoleCommand } from "./commands/console.js";
+import { errorsCommand } from "./commands/errors.js";
 
 const VERSION = "0.0.1";
 
@@ -80,6 +83,14 @@ bb-browser - AI Agent 浏览器自动化工具
   frame main        返回主 frame
   dialog accept [text]  接受对话框（alert/confirm/prompt）
   dialog dismiss    拒绝/关闭对话框
+  network requests [filter]  查看网络请求
+  network route <url> [--abort|--body <json>]  拦截请求
+  network unroute [url]  移除拦截规则
+  network clear     清空请求记录
+  console           查看控制台消息
+  console --clear   清空控制台
+  errors            查看 JS 错误
+  errors --clear    清空错误记录
 
 选项：
   --json          以 JSON 格式输出
@@ -443,6 +454,29 @@ async function main(): Promise<void> {
         }
         const promptText = parsed.args[1]; // accept 时可选的 prompt 文本
         await dialogCommand(subCommand, promptText, { json: parsed.flags.json });
+        break;
+      }
+
+      case "network": {
+        const subCommand = parsed.args[0] || "requests";
+        const urlOrFilter = parsed.args[1];
+        // 解析 network 特有的选项
+        const abort = process.argv.includes("--abort");
+        const bodyIndex = process.argv.findIndex(a => a === "--body");
+        const body = bodyIndex >= 0 ? process.argv[bodyIndex + 1] : undefined;
+        await networkCommand(subCommand, urlOrFilter, { json: parsed.flags.json, abort, body });
+        break;
+      }
+
+      case "console": {
+        const clear = process.argv.includes("--clear");
+        await consoleCommand({ json: parsed.flags.json, clear });
+        break;
+      }
+
+      case "errors": {
+        const clear = process.argv.includes("--clear");
+        await errorsCommand({ json: parsed.flags.json, clear });
         break;
       }
 

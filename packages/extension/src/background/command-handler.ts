@@ -134,6 +134,18 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
         result = await handleDialog(command);
         break;
 
+      case 'network':
+        result = await handleNetwork(command);
+        break;
+
+      case 'console':
+        result = await handleConsole(command);
+        break;
+
+      case 'errors':
+        result = await handleErrors(command);
+        break;
+
       default:
         result = {
           id: command.id,
@@ -1680,4 +1692,241 @@ function waitForTabLoad(tabId: number, timeout = 30000): Promise<void> {
 
     chrome.tabs.onUpdated.addListener(listener);
   });
+}
+
+// ============================================================================
+// Network/Console/Errors 命令处理
+// ============================================================================
+
+/**
+ * 处理 network 命令 - 网络监控和拦截
+ */
+async function handleNetwork(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  const tabId = activeTab.id;
+  const subCommand = command.networkCommand as string;
+  const urlPattern = command.url as string | undefined;
+
+  console.log('[CommandHandler] Network command:', subCommand, urlPattern);
+
+  try {
+    switch (subCommand) {
+      case 'requests': {
+        // 确保网络监控已启用
+        await cdp.enableNetwork(tabId);
+        const filter = command.filter as string | undefined;
+        const requests = cdp.getNetworkRequests(tabId, filter);
+        
+        // 转换为简化格式
+        const networkRequests = requests.map(r => ({
+          requestId: r.requestId,
+          url: r.url,
+          method: r.method,
+          type: r.type,
+          timestamp: r.timestamp,
+          status: r.response?.status,
+          statusText: r.response?.statusText,
+          failed: r.failed,
+          failureReason: r.failureReason,
+        }));
+
+        return {
+          id: command.id,
+          success: true,
+          data: {
+            networkRequests,
+          },
+        };
+      }
+
+      case 'route': {
+        if (!urlPattern) {
+          return {
+            id: command.id,
+            success: false,
+            error: 'URL pattern required for route command',
+          };
+        }
+        
+        const options = command.routeOptions || {};
+        await cdp.addNetworkRoute(tabId, urlPattern, options);
+        const routeCount = cdp.getNetworkRoutes(tabId).length;
+
+        return {
+          id: command.id,
+          success: true,
+          data: {
+            routeCount,
+          },
+        };
+      }
+
+      case 'unroute': {
+        cdp.removeNetworkRoute(tabId, urlPattern);
+        const routeCount = cdp.getNetworkRoutes(tabId).length;
+
+        return {
+          id: command.id,
+          success: true,
+          data: {
+            routeCount,
+          },
+        };
+      }
+
+      case 'clear': {
+        cdp.clearNetworkRequests(tabId);
+        return {
+          id: command.id,
+          success: true,
+          data: {},
+        };
+      }
+
+      default:
+        return {
+          id: command.id,
+          success: false,
+          error: `Unknown network subcommand: ${subCommand}`,
+        };
+    }
+  } catch (error) {
+    console.error('[CommandHandler] Network command failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Network command failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 console 命令 - 控制台消息
+ */
+async function handleConsole(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  const tabId = activeTab.id;
+  const subCommand = (command.consoleCommand || 'get') as string;
+
+  console.log('[CommandHandler] Console command:', subCommand);
+
+  try {
+    // 确保 console 监控已启用
+    await cdp.enableConsole(tabId);
+
+    switch (subCommand) {
+      case 'get': {
+        const messages = cdp.getConsoleMessages(tabId);
+        return {
+          id: command.id,
+          success: true,
+          data: {
+            consoleMessages: messages,
+          },
+        };
+      }
+
+      case 'clear': {
+        cdp.clearConsoleMessages(tabId);
+        return {
+          id: command.id,
+          success: true,
+          data: {},
+        };
+      }
+
+      default:
+        return {
+          id: command.id,
+          success: false,
+          error: `Unknown console subcommand: ${subCommand}`,
+        };
+    }
+  } catch (error) {
+    console.error('[CommandHandler] Console command failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Console command failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 errors 命令 - JS 错误
+ */
+async function handleErrors(command: CommandEvent): Promise<CommandResult> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  const tabId = activeTab.id;
+  const subCommand = (command.errorsCommand || 'get') as string;
+
+  console.log('[CommandHandler] Errors command:', subCommand);
+
+  try {
+    // 确保 console 监控已启用（errors 也通过 Runtime 捕获）
+    await cdp.enableConsole(tabId);
+
+    switch (subCommand) {
+      case 'get': {
+        const errors = cdp.getJSErrors(tabId);
+        return {
+          id: command.id,
+          success: true,
+          data: {
+            jsErrors: errors,
+          },
+        };
+      }
+
+      case 'clear': {
+        cdp.clearJSErrors(tabId);
+        return {
+          id: command.id,
+          success: true,
+          data: {},
+        };
+      }
+
+      default:
+        return {
+          id: command.id,
+          success: false,
+          error: `Unknown errors subcommand: ${subCommand}`,
+        };
+    }
+  } catch (error) {
+    console.error('[CommandHandler] Errors command failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Errors command failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }

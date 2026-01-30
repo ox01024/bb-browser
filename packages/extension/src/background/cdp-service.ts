@@ -120,6 +120,53 @@ export interface DialogInfo {
   hasBrowserHandler: boolean;
 }
 
+/** 网络请求信息 */
+export interface NetworkRequest {
+  requestId: string;
+  url: string;
+  method: string;
+  type: string;
+  timestamp: number;
+  headers?: Record<string, string>;
+  postData?: string;
+  response?: {
+    status: number;
+    statusText: string;
+    headers?: Record<string, string>;
+    mimeType?: string;
+  };
+  failed?: boolean;
+  failureReason?: string;
+}
+
+/** 控制台消息 */
+export interface ConsoleMessage {
+  type: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  text: string;
+  timestamp: number;
+  url?: string;
+  lineNumber?: number;
+}
+
+/** JS 异常错误 */
+export interface JSError {
+  message: string;
+  url?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+  stackTrace?: string;
+  timestamp: number;
+}
+
+/** 网络拦截规则 */
+export interface NetworkRoute {
+  urlPattern: string;
+  action: 'abort' | 'continue' | 'fulfill';
+  body?: string;
+  status?: number;
+  headers?: Record<string, string>;
+}
+
 // ============================================================================
 // 状态管理
 // ============================================================================
@@ -129,6 +176,25 @@ const attachedTabs = new Set<number>();
 
 /** 待处理的 dialog 信息 */
 const pendingDialogs = new Map<number, DialogInfo>();
+
+/** 网络请求记录（每个 tab 最多保留 500 条） */
+const networkRequests = new Map<number, NetworkRequest[]>();
+
+/** 控制台消息记录（每个 tab 最多保留 500 条） */
+const consoleMessages = new Map<number, ConsoleMessage[]>();
+
+/** JS 错误记录（每个 tab 最多保留 100 条） */
+const jsErrors = new Map<number, JSError[]>();
+
+/** 网络拦截规则 */
+const networkRoutes = new Map<number, NetworkRoute[]>();
+
+/** 是否已启用网络监控的 tab */
+const networkEnabledTabs = new Set<number>();
+
+const MAX_REQUESTS = 500;
+const MAX_CONSOLE_MESSAGES = 500;
+const MAX_ERRORS = 100;
 
 // ============================================================================
 // 核心 CDP 调用
@@ -637,6 +703,167 @@ export async function getPartialAccessibilityTree(
 }
 
 // ============================================================================
+// Network 域 - 网络监控和拦截
+// ============================================================================
+
+/**
+ * 启用网络监控
+ */
+export async function enableNetwork(tabId: number): Promise<void> {
+  if (networkEnabledTabs.has(tabId)) return;
+  
+  await ensureAttached(tabId);
+  await sendCommand(tabId, 'Network.enable');
+  await sendCommand(tabId, 'Fetch.enable', {
+    patterns: [{ urlPattern: '*' }],
+  });
+  
+  networkEnabledTabs.add(tabId);
+  if (!networkRequests.has(tabId)) {
+    networkRequests.set(tabId, []);
+  }
+  
+  console.log('[CDPService] Network enabled for tab:', tabId);
+}
+
+/**
+ * 禁用网络监控
+ */
+export async function disableNetwork(tabId: number): Promise<void> {
+  if (!networkEnabledTabs.has(tabId)) return;
+  
+  try {
+    await sendCommand(tabId, 'Fetch.disable');
+    await sendCommand(tabId, 'Network.disable');
+  } catch (e) {
+    // 忽略错误
+  }
+  
+  networkEnabledTabs.delete(tabId);
+  console.log('[CDPService] Network disabled for tab:', tabId);
+}
+
+/**
+ * 获取网络请求记录
+ */
+export function getNetworkRequests(tabId: number, filter?: string): NetworkRequest[] {
+  const requests = networkRequests.get(tabId) || [];
+  if (!filter) return requests;
+  
+  const lowerFilter = filter.toLowerCase();
+  return requests.filter(r => 
+    r.url.toLowerCase().includes(lowerFilter) ||
+    r.method.toLowerCase().includes(lowerFilter) ||
+    r.type.toLowerCase().includes(lowerFilter)
+  );
+}
+
+/**
+ * 清空网络请求记录
+ */
+export function clearNetworkRequests(tabId: number): void {
+  networkRequests.set(tabId, []);
+}
+
+/**
+ * 添加网络拦截规则
+ */
+export async function addNetworkRoute(
+  tabId: number,
+  urlPattern: string,
+  options: { abort?: boolean; body?: string; status?: number; headers?: Record<string, string> } = {}
+): Promise<void> {
+  await enableNetwork(tabId);
+  
+  const route: NetworkRoute = {
+    urlPattern,
+    action: options.abort ? 'abort' : (options.body ? 'fulfill' : 'continue'),
+    body: options.body,
+    status: options.status ?? 200,
+    headers: options.headers,
+  };
+  
+  const routes = networkRoutes.get(tabId) || [];
+  // 移除同 pattern 的旧规则
+  const filtered = routes.filter(r => r.urlPattern !== urlPattern);
+  filtered.push(route);
+  networkRoutes.set(tabId, filtered);
+  
+  console.log('[CDPService] Added network route:', route);
+}
+
+/**
+ * 移除网络拦截规则
+ */
+export function removeNetworkRoute(tabId: number, urlPattern?: string): void {
+  if (!urlPattern) {
+    networkRoutes.delete(tabId);
+    console.log('[CDPService] Removed all network routes for tab:', tabId);
+  } else {
+    const routes = networkRoutes.get(tabId) || [];
+    networkRoutes.set(tabId, routes.filter(r => r.urlPattern !== urlPattern));
+    console.log('[CDPService] Removed network route:', urlPattern);
+  }
+}
+
+/**
+ * 获取所有网络拦截规则
+ */
+export function getNetworkRoutes(tabId: number): NetworkRoute[] {
+  return networkRoutes.get(tabId) || [];
+}
+
+// ============================================================================
+// Console/Runtime 域 - 控制台和错误监控
+// ============================================================================
+
+/**
+ * 启用控制台消息监控
+ */
+export async function enableConsole(tabId: number): Promise<void> {
+  await ensureAttached(tabId);
+  await sendCommand(tabId, 'Runtime.enable');
+  await sendCommand(tabId, 'Log.enable');
+  
+  if (!consoleMessages.has(tabId)) {
+    consoleMessages.set(tabId, []);
+  }
+  if (!jsErrors.has(tabId)) {
+    jsErrors.set(tabId, []);
+  }
+  
+  console.log('[CDPService] Console enabled for tab:', tabId);
+}
+
+/**
+ * 获取控制台消息
+ */
+export function getConsoleMessages(tabId: number): ConsoleMessage[] {
+  return consoleMessages.get(tabId) || [];
+}
+
+/**
+ * 清空控制台消息
+ */
+export function clearConsoleMessages(tabId: number): void {
+  consoleMessages.set(tabId, []);
+}
+
+/**
+ * 获取 JS 错误
+ */
+export function getJSErrors(tabId: number): JSError[] {
+  return jsErrors.get(tabId) || [];
+}
+
+/**
+ * 清空 JS 错误
+ */
+export function clearJSErrors(tabId: number): void {
+  jsErrors.set(tabId, []);
+}
+
+// ============================================================================
 // 事件处理
 // ============================================================================
 
@@ -646,30 +873,323 @@ export async function getPartialAccessibilityTree(
 export function initEventListeners(): void {
   // 监听 debugger 事件
   chrome.debugger.onEvent.addListener((source, method, params) => {
-    if (method === 'Page.javascriptDialogOpening' && source.tabId) {
+    const tabId = source.tabId;
+    if (!tabId) return;
+    
+    // Dialog 事件
+    if (method === 'Page.javascriptDialogOpening') {
       const dialogParams = params as DialogInfo;
       console.log('[CDPService] Dialog opened:', dialogParams);
-      pendingDialogs.set(source.tabId, dialogParams);
-    } else if (method === 'Page.javascriptDialogClosed' && source.tabId) {
+      pendingDialogs.set(tabId, dialogParams);
+    } else if (method === 'Page.javascriptDialogClosed') {
       console.log('[CDPService] Dialog closed');
-      pendingDialogs.delete(source.tabId);
+      pendingDialogs.delete(tabId);
+    }
+    
+    // Network 事件
+    else if (method === 'Network.requestWillBeSent') {
+      handleNetworkRequest(tabId, params as NetworkRequestParams);
+    } else if (method === 'Network.responseReceived') {
+      handleNetworkResponse(tabId, params as NetworkResponseParams);
+    } else if (method === 'Network.loadingFailed') {
+      handleNetworkFailed(tabId, params as NetworkFailedParams);
+    }
+    
+    // Fetch 拦截事件
+    else if (method === 'Fetch.requestPaused') {
+      handleFetchPaused(tabId, params as FetchPausedParams);
+    }
+    
+    // Console 事件
+    else if (method === 'Runtime.consoleAPICalled') {
+      handleConsoleAPI(tabId, params as ConsoleAPIParams);
+    } else if (method === 'Log.entryAdded') {
+      handleLogEntry(tabId, params as LogEntryParams);
+    }
+    
+    // Runtime 异常事件
+    else if (method === 'Runtime.exceptionThrown') {
+      handleException(tabId, params as ExceptionParams);
     }
   });
 
   // 当 debugger 被 detach 时清理状态
   chrome.debugger.onDetach.addListener((source) => {
     if (source.tabId) {
-      attachedTabs.delete(source.tabId);
-      pendingDialogs.delete(source.tabId);
+      cleanupTab(source.tabId);
       console.log('[CDPService] Debugger detached from tab:', source.tabId);
     }
   });
 
   // 当 tab 关闭时清理状态
   chrome.tabs.onRemoved.addListener((tabId) => {
-    attachedTabs.delete(tabId);
-    pendingDialogs.delete(tabId);
+    cleanupTab(tabId);
   });
+}
+
+/**
+ * 清理 tab 相关状态
+ */
+function cleanupTab(tabId: number): void {
+  attachedTabs.delete(tabId);
+  pendingDialogs.delete(tabId);
+  networkRequests.delete(tabId);
+  networkRoutes.delete(tabId);
+  networkEnabledTabs.delete(tabId);
+  consoleMessages.delete(tabId);
+  jsErrors.delete(tabId);
+}
+
+// ============================================================================
+// 事件处理函数 - Network
+// ============================================================================
+
+interface NetworkRequestParams {
+  requestId: string;
+  request: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    postData?: string;
+  };
+  type: string;
+  timestamp: number;
+}
+
+interface NetworkResponseParams {
+  requestId: string;
+  response: {
+    url: string;
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    mimeType: string;
+  };
+}
+
+interface NetworkFailedParams {
+  requestId: string;
+  errorText: string;
+}
+
+interface FetchPausedParams {
+  requestId: string;
+  request: {
+    url: string;
+    method: string;
+  };
+}
+
+function handleNetworkRequest(tabId: number, params: NetworkRequestParams): void {
+  const requests = networkRequests.get(tabId) || [];
+  
+  // 限制数量
+  if (requests.length >= MAX_REQUESTS) {
+    requests.shift();
+  }
+  
+  requests.push({
+    requestId: params.requestId,
+    url: params.request.url,
+    method: params.request.method,
+    type: params.type,
+    timestamp: params.timestamp * 1000,
+    headers: params.request.headers,
+    postData: params.request.postData,
+  });
+  
+  networkRequests.set(tabId, requests);
+}
+
+function handleNetworkResponse(tabId: number, params: NetworkResponseParams): void {
+  const requests = networkRequests.get(tabId) || [];
+  const request = requests.find(r => r.requestId === params.requestId);
+  
+  if (request) {
+    request.response = {
+      status: params.response.status,
+      statusText: params.response.statusText,
+      headers: params.response.headers,
+      mimeType: params.response.mimeType,
+    };
+  }
+}
+
+function handleNetworkFailed(tabId: number, params: NetworkFailedParams): void {
+  const requests = networkRequests.get(tabId) || [];
+  const request = requests.find(r => r.requestId === params.requestId);
+  
+  if (request) {
+    request.failed = true;
+    request.failureReason = params.errorText;
+  }
+}
+
+async function handleFetchPaused(tabId: number, params: FetchPausedParams): Promise<void> {
+  const routes = networkRoutes.get(tabId) || [];
+  const url = params.request.url;
+  
+  // 查找匹配的规则
+  const matchedRoute = routes.find(route => {
+    if (route.urlPattern === '*') return true;
+    if (route.urlPattern.includes('*')) {
+      const regex = new RegExp(route.urlPattern.replace(/\*/g, '.*'));
+      return regex.test(url);
+    }
+    return url.includes(route.urlPattern);
+  });
+  
+  try {
+    if (matchedRoute) {
+      if (matchedRoute.action === 'abort') {
+        await sendCommand(tabId, 'Fetch.failRequest', {
+          requestId: params.requestId,
+          errorReason: 'BlockedByClient',
+        });
+        console.log('[CDPService] Blocked request:', url);
+      } else if (matchedRoute.action === 'fulfill') {
+        await sendCommand(tabId, 'Fetch.fulfillRequest', {
+          requestId: params.requestId,
+          responseCode: matchedRoute.status || 200,
+          responseHeaders: Object.entries(matchedRoute.headers || {}).map(([name, value]) => ({ name, value })),
+          body: matchedRoute.body ? btoa(matchedRoute.body) : undefined,
+        });
+        console.log('[CDPService] Fulfilled request with mock:', url);
+      } else {
+        await sendCommand(tabId, 'Fetch.continueRequest', {
+          requestId: params.requestId,
+        });
+      }
+    } else {
+      // 没有匹配规则，继续请求
+      await sendCommand(tabId, 'Fetch.continueRequest', {
+        requestId: params.requestId,
+      });
+    }
+  } catch (error) {
+    console.error('[CDPService] Fetch handling error:', error);
+    // 出错时尝试继续请求
+    try {
+      await sendCommand(tabId, 'Fetch.continueRequest', {
+        requestId: params.requestId,
+      });
+    } catch {
+      // 忽略
+    }
+  }
+}
+
+// ============================================================================
+// 事件处理函数 - Console/Runtime
+// ============================================================================
+
+interface ConsoleAPIParams {
+  type: string;
+  args: Array<{ type: string; value?: unknown; description?: string }>;
+  timestamp: number;
+  stackTrace?: { callFrames: Array<{ url: string; lineNumber: number }> };
+}
+
+interface LogEntryParams {
+  entry: {
+    level: string;
+    text: string;
+    timestamp: number;
+    url?: string;
+    lineNumber?: number;
+  };
+}
+
+interface ExceptionParams {
+  exceptionDetails: {
+    text: string;
+    exception?: { description?: string };
+    url?: string;
+    lineNumber?: number;
+    columnNumber?: number;
+    stackTrace?: { callFrames: Array<{ url: string; lineNumber: number; columnNumber: number }> };
+  };
+  timestamp: number;
+}
+
+function handleConsoleAPI(tabId: number, params: ConsoleAPIParams): void {
+  const messages = consoleMessages.get(tabId) || [];
+  
+  if (messages.length >= MAX_CONSOLE_MESSAGES) {
+    messages.shift();
+  }
+  
+  // 将参数转换为文本
+  const text = params.args
+    .map(arg => arg.value !== undefined ? String(arg.value) : (arg.description || ''))
+    .join(' ');
+  
+  const typeMap: Record<string, ConsoleMessage['type']> = {
+    log: 'log',
+    info: 'info',
+    warning: 'warn',
+    error: 'error',
+    debug: 'debug',
+  };
+  
+  messages.push({
+    type: typeMap[params.type] || 'log',
+    text,
+    timestamp: params.timestamp,
+    url: params.stackTrace?.callFrames[0]?.url,
+    lineNumber: params.stackTrace?.callFrames[0]?.lineNumber,
+  });
+  
+  consoleMessages.set(tabId, messages);
+}
+
+function handleLogEntry(tabId: number, params: LogEntryParams): void {
+  const messages = consoleMessages.get(tabId) || [];
+  
+  if (messages.length >= MAX_CONSOLE_MESSAGES) {
+    messages.shift();
+  }
+  
+  const typeMap: Record<string, ConsoleMessage['type']> = {
+    verbose: 'debug',
+    info: 'info',
+    warning: 'warn',
+    error: 'error',
+  };
+  
+  messages.push({
+    type: typeMap[params.entry.level] || 'log',
+    text: params.entry.text,
+    timestamp: params.entry.timestamp,
+    url: params.entry.url,
+    lineNumber: params.entry.lineNumber,
+  });
+  
+  consoleMessages.set(tabId, messages);
+}
+
+function handleException(tabId: number, params: ExceptionParams): void {
+  const errors = jsErrors.get(tabId) || [];
+  
+  if (errors.length >= MAX_ERRORS) {
+    errors.shift();
+  }
+  
+  const details = params.exceptionDetails;
+  const stackTrace = details.stackTrace?.callFrames
+    .map(f => `  at ${f.url}:${f.lineNumber}:${f.columnNumber}`)
+    .join('\n');
+  
+  errors.push({
+    message: details.exception?.description || details.text,
+    url: details.url,
+    lineNumber: details.lineNumber,
+    columnNumber: details.columnNumber,
+    stackTrace,
+    timestamp: params.timestamp,
+  });
+  
+  jsErrors.set(tabId, errors);
 }
 
 // ============================================================================
