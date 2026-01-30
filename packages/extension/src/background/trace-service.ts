@@ -161,18 +161,30 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // 监听标签页导航事件
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, _tab) => {
-  if (tabId === recordingTabId && isRecording && changeInfo.url) {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
+  if (tabId === recordingTabId && isRecording) {
     // 记录导航事件
-    events.push({
-      type: 'navigation',
-      timestamp: Date.now(),
-      url: changeInfo.url,
-      elementRole: 'document',
-      elementName: _tab.title || '',
-      elementTag: 'document',
-    });
-    console.log('[TraceService] Navigation event:', changeInfo.url);
+    if (changeInfo.url) {
+      events.push({
+        type: 'navigation',
+        timestamp: Date.now(),
+        url: changeInfo.url,
+        elementRole: 'document',
+        elementName: _tab.title || '',
+        elementTag: 'document',
+      });
+      console.log('[TraceService] Navigation event:', changeInfo.url);
+    }
+    
+    // 页面加载完成后，通知 content script 开始录制
+    if (changeInfo.status === 'complete') {
+      console.log('[TraceService] Page loaded, notifying content script to start recording');
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: 'TRACE_START' });
+      } catch (error) {
+        console.log('[TraceService] Could not notify content script:', error);
+      }
+    }
   }
 });
 
