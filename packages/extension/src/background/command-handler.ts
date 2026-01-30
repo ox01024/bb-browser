@@ -93,6 +93,22 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
         result = await handleSelect(command);
         break;
 
+      case 'tab_list':
+        result = await handleTabList(command);
+        break;
+
+      case 'tab_new':
+        result = await handleTabNew(command);
+        break;
+
+      case 'tab_select':
+        result = await handleTabSelect(command);
+        break;
+
+      case 'tab_close':
+        result = await handleTabClose(command);
+        break;
+
       default:
         result = {
           id: command.id,
@@ -1147,6 +1163,208 @@ async function handleEval(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Eval failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 tab_list 命令 - 列出所有标签页
+ */
+async function handleTabList(command: CommandEvent): Promise<CommandResult> {
+  console.log('[CommandHandler] Listing all tabs');
+
+  try {
+    // 获取当前窗口的所有标签页
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+
+    // 转换为 TabInfo 格式
+    const tabInfos = tabs.map(tab => ({
+      index: tab.index,
+      url: tab.url || '',
+      title: tab.title || '',
+      active: tab.active || false,
+      tabId: tab.id || 0,
+    }));
+
+    // 找到当前活动标签页的索引
+    const activeTab = tabInfos.find(t => t.active);
+    const activeIndex = activeTab?.index ?? 0;
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        tabs: tabInfos,
+        activeIndex,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Tab list failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Tab list failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 tab_new 命令 - 新建标签页
+ */
+async function handleTabNew(command: CommandEvent): Promise<CommandResult> {
+  const url = command.url as string | undefined;
+
+  console.log('[CommandHandler] Creating new tab:', url || 'about:blank');
+
+  try {
+    const createOptions: chrome.tabs.CreateProperties = { active: true };
+    if (url) {
+      createOptions.url = url;
+    }
+
+    const tab = await chrome.tabs.create(createOptions);
+
+    // 如果有 URL，等待页面加载完成
+    if (url && tab.id) {
+      await waitForTabLoad(tab.id);
+    }
+
+    // 获取最新的标签页信息
+    const updatedTab = tab.id ? await chrome.tabs.get(tab.id) : tab;
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        tabId: updatedTab.id,
+        title: updatedTab.title || '',
+        url: updatedTab.url || '',
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Tab new failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Tab new failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 tab_select 命令 - 切换到指定标签页
+ */
+async function handleTabSelect(command: CommandEvent): Promise<CommandResult> {
+  const index = command.index as number;
+
+  if (index === undefined || index < 0) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing or invalid index parameter',
+    };
+  }
+
+  console.log('[CommandHandler] Selecting tab at index:', index);
+
+  try {
+    // 获取当前窗口的所有标签页
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+
+    // 找到目标索引的标签页
+    const targetTab = tabs.find(t => t.index === index);
+
+    if (!targetTab || !targetTab.id) {
+      return {
+        id: command.id,
+        success: false,
+        error: `No tab found at index ${index} (total tabs: ${tabs.length})`,
+      };
+    }
+
+    // 激活标签页
+    await chrome.tabs.update(targetTab.id, { active: true });
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        tabId: targetTab.id,
+        title: targetTab.title || '',
+        url: targetTab.url || '',
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Tab select failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Tab select failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 tab_close 命令 - 关闭标签页
+ */
+async function handleTabClose(command: CommandEvent): Promise<CommandResult> {
+  const index = command.index as number | undefined;
+
+  console.log('[CommandHandler] Closing tab at index:', index ?? 'current');
+
+  try {
+    let targetTab: chrome.tabs.Tab;
+
+    if (index !== undefined) {
+      // 关闭指定索引的标签页
+      const tabs = await chrome.tabs.query({ currentWindow: true });
+      const found = tabs.find(t => t.index === index);
+
+      if (!found || !found.id) {
+        return {
+          id: command.id,
+          success: false,
+          error: `No tab found at index ${index} (total tabs: ${tabs.length})`,
+        };
+      }
+
+      targetTab = found;
+    } else {
+      // 关闭当前活动标签页
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      if (!activeTab || !activeTab.id) {
+        return {
+          id: command.id,
+          success: false,
+          error: 'No active tab found',
+        };
+      }
+
+      targetTab = activeTab;
+    }
+
+    const tabId = targetTab.id!;
+    const title = targetTab.title || '';
+    const url = targetTab.url || '';
+
+    await chrome.tabs.remove(tabId);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        tabId,
+        title,
+        url,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Tab close failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Tab close failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

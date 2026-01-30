@@ -33,6 +33,7 @@ import { backCommand, forwardCommand, refreshCommand } from "./commands/nav.js";
 import { checkCommand, uncheckCommand } from "./commands/check.js";
 import { selectCommand } from "./commands/select.js";
 import { evalCommand } from "./commands/eval.js";
+import { tabCommand } from "./commands/tab.js";
 
 const VERSION = "0.0.1";
 
@@ -69,6 +70,10 @@ bb-browser - AI Agent 浏览器自动化工具
   back              后退
   forward           前进
   refresh           刷新页面
+  tab               列出所有标签页
+  tab new [url]     新建标签页
+  tab <n>           切换到第 n 个标签页
+  tab close [n]     关闭标签页（默认当前）
 
 选项：
   --json          以 JSON 格式输出
@@ -395,6 +400,11 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await scrollCommand(direction, pixels, { json: parsed.flags.json });
+        break;
+      }
+
+      case "tab": {
+        await tabCommand(parsed.args, { json: parsed.flags.json });
         break;
       }
 

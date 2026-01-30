@@ -22,7 +22,11 @@ export type ActionType =
   | "back"
   | "forward"
   | "refresh"
-  | "eval";
+  | "eval"
+  | "tab_list"
+  | "tab_new"
+  | "tab_select"
+  | "tab_close";
 
 /** 请求类型 */
 export interface Request {
@@ -46,6 +50,8 @@ export interface Request {
   script?: string;
   /** 选项值（select 命令使用） */
   value?: string;
+  /** 标签页索引（tab_select, tab_close 命令使用） */
+  index?: number;
 }
 
 /** 元素引用信息 */
@@ -58,6 +64,20 @@ export interface RefInfo {
   name?: string;
   /** 标签名 */
   tagName: string;
+}
+
+/** 标签页信息 */
+export interface TabInfo {
+  /** 标签页在窗口中的索引（0-based） */
+  index: number;
+  /** 标签页 URL */
+  url: string;
+  /** 标签页标题 */
+  title: string;
+  /** 是否是当前活动标签页 */
+  active: boolean;
+  /** 标签页 ID */
+  tabId: number;
 }
 
 /** Snapshot 命令返回的数据 */
@@ -84,6 +104,10 @@ export interface ResponseData {
   screenshotPath?: string;
   /** eval 执行结果 */
   result?: unknown;
+  /** 标签页列表（tab_list 命令返回） */
+  tabs?: TabInfo[];
+  /** 当前活动标签页索引（tab_list 命令返回） */
+  activeIndex?: number;
 }
 
 /** 响应类型 */
