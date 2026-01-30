@@ -1113,13 +1113,20 @@ async function handleEval(command: CommandEvent): Promise<CommandResult> {
 
   try {
     // 使用 chrome.scripting.executeScript 执行用户脚本
+    // 注意：需要指定 world: 'MAIN' 才能访问页面的 document 等全局对象
     const results = await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
+      world: 'MAIN', // 在主页面上下文中执行，可访问 document, window 等
       func: (code: string) => {
-        // 使用 Function 构造器执行任意 JavaScript
+        // 直接使用 eval 执行代码
         // 返回值必须是可序列化的
-        const fn = new Function(`return (${code})`);
-        return fn();
+        try {
+          return eval(code);
+        } catch (e) {
+          // 如果直接 eval 失败（比如语句而非表达式），尝试用 Function
+          const fn = new Function(code);
+          return fn();
+        }
       },
       args: [script],
     });
