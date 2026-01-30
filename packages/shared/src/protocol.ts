@@ -28,7 +28,8 @@ export type ActionType =
   | "tab_select"
   | "tab_close"
   | "frame"
-  | "frame_main";
+  | "frame_main"
+  | "dialog";
 
 /** 请求类型 */
 export interface Request {
@@ -56,6 +57,10 @@ export interface Request {
   index?: number;
   /** CSS 选择器（frame 命令使用，定位 iframe） */
   selector?: string;
+  /** dialog 响应类型（dialog 命令使用） */
+  dialogResponse?: "accept" | "dismiss";
+  /** prompt 对话框的输入文本（dialog accept 时可选） */
+  promptText?: string;
 }
 
 /** 元素引用信息 */
@@ -122,6 +127,15 @@ export interface ResponseData {
     url?: string;
     /** frame ID */
     frameId?: number;
+  };
+  /** dialog 信息（dialog 命令返回） */
+  dialogInfo?: {
+    /** 对话框类型：alert, confirm, prompt, beforeunload */
+    type: string;
+    /** 对话框消息 */
+    message: string;
+    /** 是否成功处理 */
+    handled: boolean;
   };
 }
 

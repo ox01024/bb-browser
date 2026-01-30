@@ -35,6 +35,7 @@ import { selectCommand } from "./commands/select.js";
 import { evalCommand } from "./commands/eval.js";
 import { tabCommand } from "./commands/tab.js";
 import { frameCommand, frameMainCommand } from "./commands/frame.js";
+import { dialogCommand } from "./commands/dialog.js";
 
 const VERSION = "0.0.1";
 
@@ -77,6 +78,8 @@ bb-browser - AI Agent 浏览器自动化工具
   tab close [n]     关闭标签页（默认当前）
   frame <selector>  切换到指定 iframe
   frame main        返回主 frame
+  dialog accept [text]  接受对话框（alert/confirm/prompt）
+  dialog dismiss    拒绝/关闭对话框
 
 选项：
   --json          以 JSON 格式输出
@@ -425,6 +428,21 @@ async function main(): Promise<void> {
         } else {
           await frameCommand(selectorOrMain, { json: parsed.flags.json });
         }
+        break;
+      }
+
+      case "dialog": {
+        const subCommand = parsed.args[0];
+        if (!subCommand) {
+          console.error("错误：缺少子命令");
+          console.error("用法：bb-browser dialog <accept|dismiss> [text]");
+          console.error("示例：bb-browser dialog accept");
+          console.error('      bb-browser dialog accept "my input"');
+          console.error("      bb-browser dialog dismiss");
+          process.exit(1);
+        }
+        const promptText = parsed.args[1]; // accept 时可选的 prompt 文本
+        await dialogCommand(subCommand, promptText, { json: parsed.flags.json });
         break;
       }
 
