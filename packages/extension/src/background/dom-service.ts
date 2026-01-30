@@ -762,6 +762,110 @@ export async function fillElement(tabId: number, ref: string, text: string): Pro
 }
 
 /**
+ * 逐字符输入文本（不清空原有内容）
+ * @param tabId 目标标签页 ID
+ * @param ref 元素 ref ID（如 "@5" 或 "5"）
+ * @param text 要输入的文本
+ * @returns 被输入元素的 role 和 name
+ */
+export async function typeElement(tabId: number, ref: string, text: string): Promise<{ role: string; name?: string }> {
+  const refInfo = getRefInfo(ref);
+  if (!refInfo) {
+    throw new Error(`Ref "${ref}" not found. Run snapshot first to get available refs.`);
+  }
+
+  const { xpath, role, name } = refInfo;
+
+  // 使用 chrome.scripting.executeScript 注入逐字符输入代码
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (elementXpath: string, inputText: string) => {
+      // 通过 XPath 定位元素
+      const result = document.evaluate(
+        elementXpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const element = result.singleNodeValue as HTMLElement | null;
+
+      if (!element) {
+        return { success: false, error: 'Element not found by xpath' };
+      }
+
+      // 滚动到元素可见
+      element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+
+      // 聚焦元素
+      element.focus();
+
+      // 根据元素类型逐字符输入
+      if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+        // 不清空，逐字符追加
+        for (const char of inputText) {
+          // 模拟 keydown
+          element.dispatchEvent(new KeyboardEvent('keydown', {
+            key: char,
+            bubbles: true,
+            cancelable: true,
+          }));
+
+          // 追加字符到 value
+          element.value += char;
+
+          // 触发 input 事件
+          element.dispatchEvent(new InputEvent('input', {
+            data: char,
+            inputType: 'insertText',
+            bubbles: true,
+            cancelable: true,
+          }));
+
+          // 模拟 keyup
+          element.dispatchEvent(new KeyboardEvent('keyup', {
+            key: char,
+            bubbles: true,
+            cancelable: true,
+          }));
+        }
+
+        // 最后触发 change 事件
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (element.isContentEditable) {
+        // contenteditable 元素 - 追加到现有内容
+        const selection = window.getSelection();
+        const range = document.createRange();
+        
+        // 移动光标到末尾
+        range.selectNodeContents(element);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+
+        // 逐字符插入
+        for (const char of inputText) {
+          document.execCommand('insertText', false, char);
+        }
+      } else {
+        return { success: false, error: 'Element is not typable' };
+      }
+
+      return { success: true };
+    },
+    args: [xpath, text],
+  });
+
+  const result = results[0]?.result as { success: boolean; error?: string } | undefined;
+  if (!result?.success) {
+    throw new Error(result?.error || 'Failed to type in element');
+  }
+
+  console.log('[DOMService] Typed in element:', { ref, role, name, textLength: text.length });
+  return { role, name };
+}
+
+/**
  * 获取元素文本内容
  * @param tabId 目标标签页 ID
  * @param ref 元素 ref ID（如 "@5" 或 "5"）

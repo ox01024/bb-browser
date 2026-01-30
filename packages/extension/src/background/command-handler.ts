@@ -5,7 +5,7 @@
 
 import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
-import { getSnapshot, clickElement, hoverElement, fillElement, getElementText, waitForElement } from './dom-service';
+import { getSnapshot, clickElement, hoverElement, fillElement, typeElement, getElementText, waitForElement } from './dom-service';
 
 /**
  * 处理收到的命令
@@ -35,6 +35,10 @@ export async function handleCommand(command: CommandEvent): Promise<void> {
 
       case 'fill':
         result = await handleFill(command);
+        break;
+
+      case 'type':
+        result = await handleType(command);
         break;
 
       case 'close':
@@ -334,6 +338,64 @@ async function handleFill(command: CommandEvent): Promise<CommandResult> {
       id: command.id,
       success: false,
       error: `Fill failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 处理 type 命令 - 逐字符输入文本（不清空原有内容）
+ */
+async function handleType(command: CommandEvent): Promise<CommandResult> {
+  const ref = command.ref as string;
+  const text = command.text as string;
+
+  if (!ref) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing ref parameter',
+    };
+  }
+
+  if (text === undefined || text === null) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'Missing text parameter',
+    };
+  }
+
+  // 获取当前活动标签页
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || !activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  console.log('[CommandHandler] Typing in element:', ref, 'text length:', text.length);
+
+  try {
+    const elementInfo = await typeElement(activeTab.id, ref, text);
+
+    return {
+      id: command.id,
+      success: true,
+      data: {
+        role: elementInfo.role,
+        name: elementInfo.name,
+        typedText: text,
+      },
+    };
+  } catch (error) {
+    console.error('[CommandHandler] Type failed:', error);
+    return {
+      id: command.id,
+      success: false,
+      error: `Type failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
