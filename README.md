@@ -144,7 +144,45 @@ bb-browser dialog accept "input text"
 bb-browser dialog dismiss
 ```
 
-### 7. JSON 输出
+### 7. 网络监控
+
+```bash
+# 查看网络请求
+bb-browser network requests
+
+# 按关键词过滤
+bb-browser network requests api
+
+# 拦截并阻止请求
+bb-browser network route "*ads*" --abort
+
+# Mock 响应
+bb-browser network route "/api/user" --body '{"name":"test"}'
+
+# 移除拦截规则
+bb-browser network unroute
+
+# 清空请求记录
+bb-browser network clear
+```
+
+### 8. 调试
+
+```bash
+# 查看控制台消息
+bb-browser console
+
+# 清空控制台
+bb-browser console --clear
+
+# 查看 JS 错误
+bb-browser errors
+
+# 清空错误记录
+bb-browser errors --clear
+```
+
+### 9. JSON 输出
 
 所有命令支持 `--json` 参数，方便程序解析：
 
