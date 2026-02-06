@@ -7,6 +7,7 @@ import { sendCommand } from "../client.js";
 interface ErrorsOptions {
   json?: boolean;
   clear?: boolean;
+  tabId?: number;
 }
 
 export async function errorsCommand(options: ErrorsOptions = {}): Promise<void> {
@@ -14,6 +15,7 @@ export async function errorsCommand(options: ErrorsOptions = {}): Promise<void> 
     id: crypto.randomUUID(),
     action: "errors",
     errorsCommand: options.clear ? "clear" : "get",
+    tabId: options.tabId,
   });
 
   if (options.json) {

@@ -12,6 +12,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface FillOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -48,6 +49,7 @@ export async function fillCommand(
     action: "fill",
     ref: parsedRef,
     text: text,
+    tabId: options.tabId,
   };
 
   // 发送请求

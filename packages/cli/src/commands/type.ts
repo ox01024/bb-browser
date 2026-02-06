@@ -16,6 +16,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface TypeOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -52,6 +53,7 @@ export async function typeCommand(
     action: "type",
     ref: parsedRef,
     text: text,
+    tabId: options.tabId,
   };
 
   // 发送请求

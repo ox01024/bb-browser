@@ -11,6 +11,7 @@ export interface SnapshotOptions {
   json?: boolean;
   /** 只输出可交互元素 */
   interactive?: boolean;
+  tabId?: number;
 }
 
 export async function snapshotCommand(
@@ -24,6 +25,7 @@ export async function snapshotCommand(
     id: generateId(),
     action: "snapshot",
     interactive: options.interactive,
+    tabId: options.tabId,
   };
 
   // 发送请求

@@ -7,6 +7,7 @@ import { sendCommand } from "../client.js";
 interface ConsoleOptions {
   json?: boolean;
   clear?: boolean;
+  tabId?: number;
 }
 
 export async function consoleCommand(options: ConsoleOptions = {}): Promise<void> {
@@ -14,6 +15,7 @@ export async function consoleCommand(options: ConsoleOptions = {}): Promise<void
     id: crypto.randomUUID(),
     action: "console",
     consoleCommand: options.clear ? "clear" : "get",
+    tabId: options.tabId,
   });
 
   if (options.json) {

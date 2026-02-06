@@ -9,6 +9,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface EvalOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 export async function evalCommand(
@@ -28,6 +29,7 @@ export async function evalCommand(
     id: generateId(),
     action: "eval",
     script,
+    tabId: options.tabId,
   };
 
   // 发送请求

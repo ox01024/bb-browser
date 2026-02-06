@@ -14,6 +14,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface CheckOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -42,6 +43,7 @@ export async function checkCommand(
     id: generateId(),
     action: "check",
     ref: parsedRef,
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);
@@ -93,6 +95,7 @@ export async function uncheckCommand(
     id: generateId(),
     action: "uncheck",
     ref: parsedRef,
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);

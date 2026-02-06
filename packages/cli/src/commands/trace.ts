@@ -11,6 +11,7 @@ import { sendCommand } from "../client.js";
 
 interface TraceOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 export async function traceCommand(
@@ -21,6 +22,7 @@ export async function traceCommand(
     id: crypto.randomUUID(),
     action: "trace",
     traceCommand: subCommand,
+    tabId: options.tabId,
   });
 
   if (options.json) {

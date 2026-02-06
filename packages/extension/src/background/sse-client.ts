@@ -108,7 +108,10 @@ export class SSEClient {
             data = trimmedLine.substring(5).trim();
           } else if (trimmedLine === '') {
             if (event && data) {
-              await this.handleMessage(event, data);
+              // 不 await，允许多个命令并发执行
+              this.handleMessage(event, data).catch(err =>
+                console.error('[SSEClient] handleMessage error:', err)
+              );
               event = '';
               data = '';
             }

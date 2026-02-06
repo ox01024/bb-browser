@@ -41,7 +41,7 @@ import { consoleCommand } from "./commands/console.js";
 import { errorsCommand } from "./commands/errors.js";
 import { traceCommand } from "./commands/trace.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.2";
 
 const HELP_TEXT = `
 bb-browser - AI Agent 浏览器自动化工具
@@ -101,6 +101,7 @@ bb-browser - AI Agent 浏览器自动化工具
 选项：
   --json          以 JSON 格式输出
   -i, --interactive 只输出可交互元素（snapshot 命令）
+  --tab <tabId>   指定操作的标签页 ID
   --help, -h      显示帮助信息
   --version, -v   显示版本号
 
@@ -126,6 +127,7 @@ interface ParsedArgs {
     help: boolean;
     version: boolean;
     interactive: boolean;
+    tab?: string;
   };
 }
 
@@ -163,6 +165,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg === "--id") {
       // --id 及其值由子命令通过 process.argv 自行解析，这里跳过
       skipNext = true;
+    } else if (arg === "--tab" && !result.command) {
+      // 全局 --tab 参数（出现在命令之前），跳过其值
+      skipNext = true;
     } else if (arg.startsWith("-")) {
       // 未知选项，忽略
     } else if (result.command === null) {
@@ -180,6 +185,12 @@ function parseArgs(argv: string[]): ParsedArgs {
  */
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv);
+
+  // 解析全局 --tab 参数
+  const tabArgIdx = process.argv.indexOf('--tab');
+  const globalTabId = tabArgIdx >= 0 && process.argv[tabArgIdx + 1]
+    ? parseInt(process.argv[tabArgIdx + 1], 10)
+    : undefined;
 
   // 处理全局选项
   if (parsed.flags.version) {
@@ -210,7 +221,7 @@ async function main(): Promise<void> {
       }
 
       case "snapshot": {
-        await snapshotCommand({ json: parsed.flags.json, interactive: parsed.flags.interactive });
+        await snapshotCommand({ json: parsed.flags.json, interactive: parsed.flags.interactive, tabId: globalTabId });
         break;
       }
 
@@ -222,7 +233,7 @@ async function main(): Promise<void> {
           console.error("示例：bb-browser click @5");
           process.exit(1);
         }
-        await clickCommand(ref, { json: parsed.flags.json });
+        await clickCommand(ref, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -234,7 +245,7 @@ async function main(): Promise<void> {
           console.error("示例：bb-browser hover @5");
           process.exit(1);
         }
-        await hoverCommand(ref, { json: parsed.flags.json });
+        await hoverCommand(ref, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -246,7 +257,7 @@ async function main(): Promise<void> {
           console.error("示例：bb-browser check @5");
           process.exit(1);
         }
-        await checkCommand(ref, { json: parsed.flags.json });
+        await checkCommand(ref, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -258,7 +269,7 @@ async function main(): Promise<void> {
           console.error("示例：bb-browser uncheck @5");
           process.exit(1);
         }
-        await uncheckCommand(ref, { json: parsed.flags.json });
+        await uncheckCommand(ref, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -277,7 +288,7 @@ async function main(): Promise<void> {
           console.error('示例：bb-browser fill @3 "hello world"');
           process.exit(1);
         }
-        await fillCommand(ref, text, { json: parsed.flags.json });
+        await fillCommand(ref, text, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -296,7 +307,7 @@ async function main(): Promise<void> {
           console.error('示例：bb-browser type @3 "append text"');
           process.exit(1);
         }
-        await typeCommand(ref, text, { json: parsed.flags.json });
+        await typeCommand(ref, text, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -315,7 +326,7 @@ async function main(): Promise<void> {
           console.error('示例：bb-browser select @4 "option1"');
           process.exit(1);
         }
-        await selectCommand(ref, value, { json: parsed.flags.json });
+        await selectCommand(ref, value, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -327,7 +338,7 @@ async function main(): Promise<void> {
           console.error('示例：bb-browser eval "document.title"');
           process.exit(1);
         }
-        await evalCommand(script, { json: parsed.flags.json });
+        await evalCommand(script, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -346,7 +357,7 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         const ref = parsed.args[1];
-        await getCommand(attribute, ref, { json: parsed.flags.json });
+        await getCommand(attribute, ref, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -372,28 +383,28 @@ async function main(): Promise<void> {
       }
 
       case "close": {
-        await closeCommand({ json: parsed.flags.json });
+        await closeCommand({ json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
       case "back": {
-        await backCommand({ json: parsed.flags.json });
+        await backCommand({ json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
       case "forward": {
-        await forwardCommand({ json: parsed.flags.json });
+        await forwardCommand({ json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
       case "refresh": {
-        await refreshCommand({ json: parsed.flags.json });
+        await refreshCommand({ json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
       case "screenshot": {
         const outputPath = parsed.args[0];
-        await screenshotCommand(outputPath, { json: parsed.flags.json });
+        await screenshotCommand(outputPath, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -406,7 +417,7 @@ async function main(): Promise<void> {
           console.error("      bb-browser wait @5");
           process.exit(1);
         }
-        await waitCommand(target, { json: parsed.flags.json });
+        await waitCommand(target, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -419,7 +430,7 @@ async function main(): Promise<void> {
           console.error("      bb-browser press Control+a");
           process.exit(1);
         }
-        await pressCommand(key, { json: parsed.flags.json });
+        await pressCommand(key, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -433,7 +444,7 @@ async function main(): Promise<void> {
           console.error("      bb-browser scroll up 500");
           process.exit(1);
         }
-        await scrollCommand(direction, pixels, { json: parsed.flags.json });
+        await scrollCommand(direction, pixels, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -452,9 +463,9 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         if (selectorOrMain === "main") {
-          await frameMainCommand({ json: parsed.flags.json });
+          await frameMainCommand({ json: parsed.flags.json, tabId: globalTabId });
         } else {
-          await frameCommand(selectorOrMain, { json: parsed.flags.json });
+          await frameCommand(selectorOrMain, { json: parsed.flags.json, tabId: globalTabId });
         }
         break;
       }
@@ -470,7 +481,7 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         const promptText = parsed.args[1]; // accept 时可选的 prompt 文本
-        await dialogCommand(subCommand, promptText, { json: parsed.flags.json });
+        await dialogCommand(subCommand, promptText, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 
@@ -481,19 +492,19 @@ async function main(): Promise<void> {
         const abort = process.argv.includes("--abort");
         const bodyIndex = process.argv.findIndex(a => a === "--body");
         const body = bodyIndex >= 0 ? process.argv[bodyIndex + 1] : undefined;
-        await networkCommand(subCommand, urlOrFilter, { json: parsed.flags.json, abort, body });
+        await networkCommand(subCommand, urlOrFilter, { json: parsed.flags.json, abort, body, tabId: globalTabId });
         break;
       }
 
       case "console": {
         const clear = process.argv.includes("--clear");
-        await consoleCommand({ json: parsed.flags.json, clear });
+        await consoleCommand({ json: parsed.flags.json, clear, tabId: globalTabId });
         break;
       }
 
       case "errors": {
         const clear = process.argv.includes("--clear");
-        await errorsCommand({ json: parsed.flags.json, clear });
+        await errorsCommand({ json: parsed.flags.json, clear, tabId: globalTabId });
         break;
       }
 
@@ -507,7 +518,7 @@ async function main(): Promise<void> {
           console.error("      bb-browser trace status");
           process.exit(1);
         }
-        await traceCommand(subCmd, { json: parsed.flags.json });
+        await traceCommand(subCmd, { json: parsed.flags.json, tabId: globalTabId });
         break;
       }
 

@@ -9,17 +9,35 @@ import { sendResult, CommandResult } from './api-client';
 import { CommandEvent } from './sse-client';
 import * as cdp from './cdp-service';
 import * as cdpDom from './cdp-dom-service';
+import { cleanupTab as cleanupCdpTab } from './cdp-dom-service';
+import { cleanupTab as cleanupDomTab } from './dom-service';
 import * as traceService from './trace-service';
 
 // 初始化 CDP 事件监听器
 cdp.initEventListeners();
 
 /**
- * 当前活动 Frame 的 frameId
+ * 每个 tab 的活动 Frame 的 frameId
  * null 表示主 frame，数字表示子 frame 的 frameId
  * 用于 handleFrame 内部逻辑，DOM 操作使用 dom-service 的 activeFrameId
  */
-let activeFrameId: number | null = null;
+const tabActiveFrameId = new Map<number, number | null>();
+
+/**
+ * 根据命令解析目标 tab
+ * 如果 command.tabId 是 number，用它直接获取 tab
+ * 否则 fallback 到当前活跃 tab
+ */
+async function resolveTab(command: CommandEvent): Promise<chrome.tabs.Tab> {
+  if (command.tabId !== undefined && typeof command.tabId === 'number') {
+    return chrome.tabs.get(command.tabId);
+  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    throw new Error('No active tab found');
+  }
+  return tab;
+}
 
 /**
  * 处理收到的命令
@@ -253,10 +271,10 @@ async function handleOpen(command: CommandEvent): Promise<CommandResult> {
  * v2.0: 使用 CDP Accessibility.getFullAXTree 获取可访问性树
  */
 async function handleSnapshot(command: CommandEvent): Promise<CommandResult> {
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -317,10 +335,10 @@ async function handleClick(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -367,10 +385,10 @@ async function handleHover(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -425,10 +443,10 @@ async function handleFill(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -485,10 +503,10 @@ async function handleType(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -535,10 +553,10 @@ async function handleCheck(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -586,10 +604,10 @@ async function handleUncheck(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -646,10 +664,10 @@ async function handleSelect(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -687,10 +705,10 @@ async function handleSelect(command: CommandEvent): Promise<CommandResult> {
  * 处理 close 命令 - 关闭当前标签页
  */
 async function handleClose(command: CommandEvent): Promise<CommandResult> {
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -706,6 +724,11 @@ async function handleClose(command: CommandEvent): Promise<CommandResult> {
 
   try {
     await chrome.tabs.remove(tabId);
+
+    // 清理 tab 相关状态
+    cleanupDomTab(tabId);
+    cleanupCdpTab(tabId);
+    tabActiveFrameId.delete(tabId);
 
     return {
       id: command.id,
@@ -740,10 +763,10 @@ async function handleGet(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -808,10 +831,10 @@ async function handleGet(command: CommandEvent): Promise<CommandResult> {
  * 处理 screenshot 命令 - 截取当前页面
  */
 async function handleScreenshot(command: CommandEvent): Promise<CommandResult> {
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id || !activeTab.windowId) {
+  if (!activeTab.id || !activeTab.windowId) {
     return {
       id: command.id,
       success: false,
@@ -880,10 +903,10 @@ async function handleWait(command: CommandEvent): Promise<CommandResult> {
       };
     }
 
-    // 获取当前活动标签页
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // 获取目标标签页
+    const activeTab = await resolveTab(command);
 
-    if (!activeTab || !activeTab.id) {
+    if (!activeTab.id) {
       return {
         id: command.id,
         success: false,
@@ -933,10 +956,10 @@ async function handlePress(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1003,10 +1026,10 @@ async function handleScroll(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1043,9 +1066,9 @@ async function handleScroll(command: CommandEvent): Promise<CommandResult> {
  * v2.0: 使用 CDP Runtime.evaluate
  */
 async function handleBack(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1100,9 +1123,9 @@ async function handleBack(command: CommandEvent): Promise<CommandResult> {
  * v2.0: 使用 CDP Runtime.evaluate
  */
 async function handleForward(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1144,9 +1167,9 @@ async function handleForward(command: CommandEvent): Promise<CommandResult> {
  * 处理 refresh 命令 - 刷新页面
  */
 async function handleRefresh(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1194,10 +1217,10 @@ async function handleEval(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1438,6 +1461,11 @@ async function handleTabClose(command: CommandEvent): Promise<CommandResult> {
 
     await chrome.tabs.remove(tabId);
 
+    // 清理 tab 相关状态
+    cleanupDomTab(tabId);
+    cleanupCdpTab(tabId);
+    tabActiveFrameId.delete(tabId);
+
     return {
       id: command.id,
       success: true,
@@ -1471,10 +1499,10 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1489,7 +1517,7 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
   try {
     // 1. 在页面中找到 iframe 元素并获取其信息
     const iframeInfoResults = await chrome.scripting.executeScript({
-      target: { tabId, frameIds: activeFrameId !== null ? [activeFrameId] : [0] },
+      target: { tabId, frameIds: tabActiveFrameId.get(tabId) !== null && tabActiveFrameId.get(tabId) !== undefined ? [tabActiveFrameId.get(tabId)!] : [0] },
       func: (sel: string) => {
         const iframe = document.querySelector(sel) as HTMLIFrameElement | null;
         if (!iframe) {
@@ -1599,8 +1627,8 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
     }
 
     // 5. 保存 activeFrameId 并同步到 cdp-dom-service
-    activeFrameId = targetFrameId;
-    cdpDom.setActiveFrameId(String(targetFrameId));
+    tabActiveFrameId.set(tabId, targetFrameId);
+    cdpDom.setActiveFrameId(tabId, String(targetFrameId));
 
     const matchedFrameInfo = frames.find(f => f.frameId === targetFrameId);
 
@@ -1632,9 +1660,22 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
 async function handleFrameMain(command: CommandEvent): Promise<CommandResult> {
   console.log('[CommandHandler] Switching to main frame');
 
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
+
+  if (!activeTab.id) {
+    return {
+      id: command.id,
+      success: false,
+      error: 'No active tab found',
+    };
+  }
+
+  const tabId = activeTab.id;
+
   // 重置 activeFrameId 并同步到 cdp-dom-service
-  activeFrameId = null;
-  cdpDom.setActiveFrameId(null);
+  tabActiveFrameId.set(tabId, null);
+  cdpDom.setActiveFrameId(tabId, null);
 
   return {
     id: command.id,
@@ -1663,10 +1704,10 @@ async function handleDialog(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取当前活动标签页
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // 获取目标标签页
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1751,9 +1792,9 @@ function waitForTabLoad(tabId: number, timeout = 30000): Promise<void> {
  * 处理 network 命令 - 网络监控和拦截
  */
 async function handleNetwork(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1862,9 +1903,9 @@ async function handleNetwork(command: CommandEvent): Promise<CommandResult> {
  * 处理 console 命令 - 控制台消息
  */
 async function handleConsole(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1923,9 +1964,9 @@ async function handleConsole(command: CommandEvent): Promise<CommandResult> {
  * 处理 errors 命令 - JS 错误
  */
 async function handleErrors(command: CommandEvent): Promise<CommandResult> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = await resolveTab(command);
 
-  if (!activeTab || !activeTab.id) {
+  if (!activeTab.id) {
     return {
       id: command.id,
       success: false,
@@ -1991,10 +2032,10 @@ async function handleTrace(command: CommandEvent): Promise<CommandResult> {
   try {
     switch (subCommand) {
       case 'start': {
-        // 获取当前活动标签页
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        // 获取目标标签页
+        const activeTab = await resolveTab(command);
 
-        if (!activeTab || !activeTab.id) {
+        if (!activeTab.id) {
           return {
             id: command.id,
             success: false,

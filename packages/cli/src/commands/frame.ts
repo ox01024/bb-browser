@@ -11,6 +11,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface FrameOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -31,6 +32,7 @@ export async function frameCommand(
     id: generateId(),
     action: "frame",
     selector,
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);
@@ -63,6 +65,7 @@ export async function frameMainCommand(
   const request: Request = {
     id: generateId(),
     action: "frame_main",
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);

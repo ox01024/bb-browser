@@ -12,6 +12,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface GetOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /** 支持的 get 属性类型 */
@@ -43,6 +44,7 @@ export async function getCommand(
     action: "get",
     attribute,
     ref: ref ? parseRef(ref) : undefined,
+    tabId: options.tabId,
   };
 
   // 发送请求

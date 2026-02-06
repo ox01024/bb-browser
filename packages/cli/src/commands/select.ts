@@ -14,6 +14,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface SelectOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -50,6 +51,7 @@ export async function selectCommand(
     action: "select",
     ref: parsedRef,
     value: value,
+    tabId: options.tabId,
   };
 
   // 发送请求

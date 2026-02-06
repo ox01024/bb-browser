@@ -12,6 +12,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface NavOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -23,6 +24,7 @@ export async function backCommand(options: NavOptions = {}): Promise<void> {
   const request: Request = {
     id: generateId(),
     action: "back",
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);
@@ -53,6 +55,7 @@ export async function forwardCommand(options: NavOptions = {}): Promise<void> {
   const request: Request = {
     id: generateId(),
     action: "forward",
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);
@@ -83,6 +86,7 @@ export async function refreshCommand(options: NavOptions = {}): Promise<void> {
   const request: Request = {
     id: generateId(),
     action: "refresh",
+    tabId: options.tabId,
   };
 
   const response: Response = await sendCommand(request);

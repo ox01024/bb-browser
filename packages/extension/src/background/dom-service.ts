@@ -77,30 +77,39 @@ declare global {
 // 状态管理
 // ============================================================================
 
-/** 存储最后一次 snapshot 的 refs，用于后续操作 */
-let lastSnapshotRefs: Record<string, RefInfo> = {};
+/** 按 tabId 存储每个 tab 的 snapshot refs */
+const tabSnapshotRefs = new Map<number, Record<string, RefInfo>>();
 
-/** 当前活动 Frame 的 frameId（null 表示主 frame） */
-let activeFrameId: number | null = null;
+/** 按 tabId 存储每个 tab 的活动 Frame ID */
+const tabActiveFrameId = new Map<number, number | null>();
 
 // ============================================================================
 // 公共 API
 // ============================================================================
 
 /**
- * 设置活动 frame
+ * 设置指定 tab 的活动 frame
  */
-export function setActiveFrameId(frameId: number | null): void {
-  activeFrameId = frameId;
-  console.log('[DOMService] Active frame changed:', frameId ?? 0);
+export function setActiveFrameId(tabId: number, frameId: number | null): void {
+  tabActiveFrameId.set(tabId, frameId);
+  console.log('[DOMService] Active frame changed:', { tabId, frameId: frameId ?? 0 });
 }
 
 /**
- * 获取 ref 对应的信息
+ * 获取 ref 对应的信息（在指定 tab 的 refs 中查找）
  */
-export function getRefInfo(ref: string): RefInfo | null {
+export function getRefInfo(tabId: number, ref: string): RefInfo | null {
   const refId = ref.startsWith('@') ? ref.slice(1) : ref;
-  return lastSnapshotRefs[refId] || null;
+  const refs = tabSnapshotRefs.get(tabId) || {};
+  return refs[refId] || null;
+}
+
+/**
+ * 清理指定 tab 的状态（tab 关闭时调用）
+ */
+export function cleanupTab(tabId: number): void {
+  tabSnapshotRefs.delete(tabId);
+  tabActiveFrameId.delete(tabId);
 }
 
 /**
@@ -125,8 +134,8 @@ export async function getSnapshot(tabId: number, options: SnapshotOptions = {}):
     ? convertToAccessibilityTree(domTreeResult)
     : convertToFullTree(domTreeResult);
   
-  // 4. 存储 refs 供后续操作使用
-  lastSnapshotRefs = snapshotResult.refs;
+  // 4. 存储 refs 供后续操作使用（按 tabId 隔离）
+  tabSnapshotRefs.set(tabId, snapshotResult.refs);
   
   console.log('[DOMService] Snapshot complete:', {
     mode: interactive ? 'interactive' : 'full',
@@ -145,8 +154,9 @@ export async function getSnapshot(tabId: number, options: SnapshotOptions = {}):
  * 获取当前活动 frame 的 target
  */
 function getFrameTarget(tabId: number): { tabId: number; frameIds?: number[] } {
-  if (activeFrameId !== null) {
-    return { tabId, frameIds: [activeFrameId] };
+  const frameId = tabActiveFrameId.get(tabId) ?? null;
+  if (frameId !== null) {
+    return { tabId, frameIds: [frameId] };
   }
   return { tabId };
 }

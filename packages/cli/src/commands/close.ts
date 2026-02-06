@@ -9,6 +9,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface CloseOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 export async function closeCommand(options: CloseOptions = {}): Promise<void> {
@@ -19,6 +20,7 @@ export async function closeCommand(options: CloseOptions = {}): Promise<void> {
   const request: Request = {
     id: generateId(),
     action: "close",
+    tabId: options.tabId,
   };
 
   // 发送请求

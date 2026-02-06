@@ -13,6 +13,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface PressOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -65,6 +66,7 @@ export async function pressCommand(
     action: "press",
     key,
     modifiers,
+    tabId: options.tabId,
   };
 
   // 发送请求

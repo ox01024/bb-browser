@@ -11,6 +11,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface DialogOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 export async function dialogCommand(
@@ -32,6 +33,7 @@ export async function dialogCommand(
     action: "dialog",
     dialogResponse: subCommand as "accept" | "dismiss",
     promptText: subCommand === "accept" ? promptText : undefined,
+    tabId: options.tabId,
   };
 
   // 发送请求

@@ -12,6 +12,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface HoverOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -42,6 +43,7 @@ export async function hoverCommand(
     id: generateId(),
     action: "hover",
     ref: parsedRef,
+    tabId: options.tabId,
   };
 
   // 发送请求

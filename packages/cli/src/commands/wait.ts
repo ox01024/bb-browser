@@ -11,6 +11,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface WaitOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -48,6 +49,7 @@ export async function waitCommand(
       action: "wait",
       waitType: "time",
       ms,
+      tabId: options.tabId,
     };
   } else {
     // 等待元素模式
@@ -57,6 +59,7 @@ export async function waitCommand(
       action: "wait",
       waitType: "element",
       ref,
+      tabId: options.tabId,
     };
   }
 

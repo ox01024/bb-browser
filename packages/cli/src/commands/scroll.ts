@@ -12,6 +12,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface ScrollOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 export type ScrollDirection = "up" | "down" | "left" | "right";
@@ -53,6 +54,7 @@ export async function scrollCommand(
     action: "scroll",
     direction: direction as ScrollDirection,
     pixels: pixelValue,
+    tabId: options.tabId,
   };
 
   // 发送请求

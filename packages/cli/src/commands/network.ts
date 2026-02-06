@@ -8,6 +8,7 @@ interface NetworkOptions {
   json?: boolean;
   abort?: boolean;
   body?: string;
+  tabId?: number;
 }
 
 export async function networkCommand(
@@ -25,6 +26,7 @@ export async function networkCommand(
       abort: options.abort,
       body: options.body,
     } : undefined,
+    tabId: options.tabId,
   });
 
   if (options.json) {

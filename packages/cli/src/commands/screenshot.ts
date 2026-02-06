@@ -15,6 +15,7 @@ import { ensureDaemonRunning } from "../daemon-manager.js";
 
 export interface ScreenshotOptions {
   json?: boolean;
+  tabId?: number;
 }
 
 /**
@@ -56,6 +57,7 @@ export async function screenshotCommand(
   const request: Request = {
     id: generateId(),
     action: "screenshot",
+    tabId: options.tabId,
   };
 
   // 发送请求
