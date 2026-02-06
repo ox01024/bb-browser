@@ -78,8 +78,10 @@ bb-browser - AI Agent 浏览器自动化工具
   refresh           刷新页面
   tab               列出所有标签页
   tab new [url]     新建标签页
-  tab <n>           切换到第 n 个标签页
-  tab close [n]     关闭标签页（默认当前）
+  tab <n>           切换到第 n 个标签页（按 index）
+  tab select --id <id>  切换到指定 tabId 的标签页
+  tab close [n]     关闭标签页（按 index，默认当前）
+  tab close --id <id>   关闭指定 tabId 的标签页
   frame <selector>  切换到指定 iframe
   frame main        返回主 frame
   dialog accept [text]  接受对话框（alert/confirm/prompt）
@@ -144,7 +146,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     },
   };
 
+  let skipNext = false;
   for (const arg of args) {
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
     if (arg === "--json") {
       result.flags.json = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -153,6 +160,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       result.flags.version = true;
     } else if (arg === "--interactive" || arg === "-i") {
       result.flags.interactive = true;
+    } else if (arg === "--id") {
+      // --id 及其值由子命令通过 process.argv 自行解析，这里跳过
+      skipNext = true;
     } else if (arg.startsWith("-")) {
       // 未知选项，忽略
     } else if (result.command === null) {

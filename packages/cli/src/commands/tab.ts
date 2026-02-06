@@ -1,10 +1,12 @@
 /**
  * tab 命令 - 标签页管理
  * 用法：
- *   bb-browser tab              列出所有标签页
- *   bb-browser tab new [url]    新建标签页
- *   bb-browser tab <n>          切换到第 n 个标签页
- *   bb-browser tab close [n]    关闭标签页
+ *   bb-browser tab                    列出所有标签页
+ *   bb-browser tab new [url]          新建标签页
+ *   bb-browser tab <n>                切换到第 n 个标签页（按 index）
+ *   bb-browser tab close [n]          关闭标签页（按 index）
+ *   bb-browser tab select --id <id>   切换到指定 tabId 的标签页
+ *   bb-browser tab close --id <id>    关闭指定 tabId 的标签页
  */
 
 import { generateId, type Request, type Response, type TabInfo } from "@bb-browser/shared";
@@ -17,14 +19,28 @@ export interface TabOptions {
 
 /**
  * 解析 tab 子命令
- * @param args 命令参数数组
+ * @param args 命令参数数组（已去掉 flags）
+ * @param rawArgv 原始 process.argv（用于提取 --id）
  * @returns 解析后的子命令和参数
  */
-function parseTabSubcommand(args: string[]): {
+function parseTabSubcommand(args: string[], rawArgv?: string[]): {
   action: "tab_list" | "tab_new" | "tab_select" | "tab_close";
   url?: string;
   index?: number;
+  tabId?: number;
 } {
+  // 提取 --id 参数
+  let tabId: number | undefined;
+  if (rawArgv) {
+    const idIdx = rawArgv.indexOf("--id");
+    if (idIdx >= 0 && rawArgv[idIdx + 1]) {
+      tabId = parseInt(rawArgv[idIdx + 1], 10);
+      if (isNaN(tabId)) {
+        throw new Error(`无效的 tabId: ${rawArgv[idIdx + 1]}`);
+      }
+    }
+  }
+
   if (args.length === 0) {
     return { action: "tab_list" };
   }
@@ -36,8 +52,19 @@ function parseTabSubcommand(args: string[]): {
     return { action: "tab_new", url: args[1] };
   }
 
-  // tab close [n]
+  // tab select --id <tabId>
+  if (first === "select") {
+    if (tabId !== undefined) {
+      return { action: "tab_select", tabId };
+    }
+    throw new Error("tab select 需要 --id 参数，用法：bb-browser tab select --id <tabId>");
+  }
+
+  // tab close [n | --id <tabId>]
   if (first === "close") {
+    if (tabId !== undefined) {
+      return { action: "tab_close", tabId };
+    }
     const indexArg = args[1];
     if (indexArg !== undefined) {
       const index = parseInt(indexArg, 10);
@@ -82,7 +109,7 @@ export async function tabCommand(
   await ensureDaemonRunning();
 
   // 解析子命令
-  const parsed = parseTabSubcommand(args);
+  const parsed = parseTabSubcommand(args, process.argv);
 
   // 构造请求
   const request: Request = {
@@ -90,6 +117,7 @@ export async function tabCommand(
     action: parsed.action,
     url: parsed.url,
     index: parsed.index,
+    tabId: parsed.tabId,
   };
 
   // 发送请求

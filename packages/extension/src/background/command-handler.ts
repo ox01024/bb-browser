@@ -1332,35 +1332,42 @@ async function handleTabNew(command: CommandEvent): Promise<CommandResult> {
  * 处理 tab_select 命令 - 切换到指定标签页
  */
 async function handleTabSelect(command: CommandEvent): Promise<CommandResult> {
-  const index = command.index as number;
+  const index = command.index as number | undefined;
+  const tabIdParam = command.tabId as number | undefined;
 
-  if (index === undefined || index < 0) {
+  if (index === undefined && tabIdParam === undefined) {
     return {
       id: command.id,
       success: false,
-      error: 'Missing or invalid index parameter',
+      error: 'Missing index or tabId parameter',
     };
   }
 
-  console.log('[CommandHandler] Selecting tab at index:', index);
+  console.log('[CommandHandler] Selecting tab:', tabIdParam !== undefined ? `tabId=${tabIdParam}` : `index=${index}`);
 
   try {
-    // 获取当前窗口的所有标签页
-    const tabs = await chrome.tabs.query({ currentWindow: true });
+    let targetTab: chrome.tabs.Tab;
 
-    // 找到目标索引的标签页
-    const targetTab = tabs.find(t => t.index === index);
+    if (tabIdParam !== undefined) {
+      // 按 tabId 直接定位
+      targetTab = await chrome.tabs.get(tabIdParam);
+    } else {
+      // 按 index 定位（兼容旧逻辑）
+      const tabs = await chrome.tabs.query({ currentWindow: true });
+      const found = tabs.find(t => t.index === index);
 
-    if (!targetTab || !targetTab.id) {
-      return {
-        id: command.id,
-        success: false,
-        error: `No tab found at index ${index} (total tabs: ${tabs.length})`,
-      };
+      if (!found || !found.id) {
+        return {
+          id: command.id,
+          success: false,
+          error: `No tab found at index ${index} (total tabs: ${tabs.length})`,
+        };
+      }
+      targetTab = found;
     }
 
     // 激活标签页
-    await chrome.tabs.update(targetTab.id, { active: true });
+    await chrome.tabs.update(targetTab.id!, { active: true });
 
     return {
       id: command.id,
@@ -1386,14 +1393,18 @@ async function handleTabSelect(command: CommandEvent): Promise<CommandResult> {
  */
 async function handleTabClose(command: CommandEvent): Promise<CommandResult> {
   const index = command.index as number | undefined;
+  const tabIdParam = command.tabId as number | undefined;
 
-  console.log('[CommandHandler] Closing tab at index:', index ?? 'current');
+  console.log('[CommandHandler] Closing tab:', tabIdParam !== undefined ? `tabId=${tabIdParam}` : (index !== undefined ? `index=${index}` : 'current'));
 
   try {
     let targetTab: chrome.tabs.Tab;
 
-    if (index !== undefined) {
-      // 关闭指定索引的标签页
+    if (tabIdParam !== undefined) {
+      // 按 tabId 直接定位
+      targetTab = await chrome.tabs.get(tabIdParam);
+    } else if (index !== undefined) {
+      // 按 index 定位（兼容旧逻辑）
       const tabs = await chrome.tabs.query({ currentWindow: true });
       const found = tabs.find(t => t.index === index);
 

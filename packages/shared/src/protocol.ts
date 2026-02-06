@@ -59,6 +59,8 @@ export interface Request {
   value?: string;
   /** 标签页索引（tab_select, tab_close 命令使用） */
   index?: number;
+  /** 标签页 ID（tab_select, tab_close 命令使用，优先于 index） */
+  tabId?: number | string;
   /** CSS 选择器（frame 命令使用，定位 iframe） */
   selector?: string;
   /** dialog 响应类型（dialog 命令使用） */
