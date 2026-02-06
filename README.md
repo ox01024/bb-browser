@@ -1,18 +1,22 @@
+<div align="center">
+
 # bb-browser
 
-面向 AI Agent 的浏览器自动化 CLI 工具。
+**面向 AI Agent 的浏览器自动化——复用你的真实浏览器**
 
-## 核心特性
+[![npm](https://img.shields.io/npm/v/bb-browser?color=CB3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/bb-browser)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-- **复用用户登录态** - 运行在用户的浏览器中，自动复用已登录的网站（Gmail, Twitter, 内部系统等）
-- **AI Agent 友好** - 简洁的 CLI 接口，支持 JSON 输出，Ref 系统方便元素引用
-- **反爬绕过** - 使用 chrome.debugger API，避免 Playwright 等工具的自动化指纹检测
+</div>
 
-## 架构
+---
+
+让 AI Agent 操作你真正在用的浏览器。已登录的 Gmail、Twitter、内部系统——Agent 直接能用。通过 `chrome.debugger` API 操作，绕过 Playwright 等工具的自动化指纹检测。
 
 ```
 AI Agent (Claude, GPT, etc.)
-       │ CLI 命令
+       │ CLI 命令 / Epiral gRPC
        ▼
 bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome Extension
                                               │
@@ -21,48 +25,73 @@ bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome Extension
                                     (已登录的网站、Cookies)
 ```
 
+## 为什么不用 Playwright / Selenium
+
+| | Playwright / Selenium | bb-browser |
+|---|---|---|
+| 浏览器环境 | 独立的无头浏览器 | 用户的真实浏览器 |
+| 登录态 | 没有，需要手动登录 | 复用已有的 Cookies 和会话 |
+| 自动化检测 | 容易被识别和拦截 | `chrome.debugger` API，无指纹 |
+| 内部系统 | 需要额外配置 VPN/代理 | 用户能访问的，它都能访问 |
+
+## 两种使用方式
+
+### 独立使用
+
+作为 CLI 工具，任何 AI Agent 都可以直接调用：
+
+```bash
+bb-browser open https://example.com
+bb-browser snapshot -i
+bb-browser click @0
+bb-browser fill @2 "search query"
+```
+
+### 接入 Epiral Agent
+
+通过 [Epiral CLI](https://github.com/epiral/cli) 的 Browser Bridge 接入 [Epiral Agent](https://github.com/epiral/agent)，让 Agent 远程控制浏览器：
+
+```
+Epiral Agent → gRPC → Epiral CLI (Browser Bridge) → SSE → Chrome 扩展 → 浏览器
+```
+
+只需在 Chrome 扩展设置中将上游 URL 指向 Epiral CLI 的 SSE 端口即可。Agent 可以同时接入多个浏览器。
+
 ## 安装
 
-### 方式 1：npm 安装（推荐）
+### npm 安装（推荐）
 
 ```bash
 npm install -g bb-browser
 ```
 
-### 方式 2：从源码构建
+### 从源码构建
 
 ```bash
 git clone https://github.com/yan5xu/bb-browser.git
 cd bb-browser
-pnpm install
-pnpm build
+pnpm install && pnpm build
 ```
 
-### 加载 Chrome 扩展
+### 加载 Chrome 扩展（必须）
 
-**必须步骤**：CLI 需要配合 Chrome 扩展使用。
-
-1. 打开 Chrome，访问 `chrome://extensions/`
-2. 开启「开发者模式」（右上角开关）
+1. 打开 Chrome → `chrome://extensions/`
+2. 开启「开发者模式」
 3. 点击「加载已解压的扩展程序」
 4. 选择扩展目录：
    - npm 安装：`node_modules/bb-browser/extension/`
    - 源码构建：`packages/extension/dist/`
-5. 确认扩展已启用
 
 ## 使用
 
-### 1. 启动 Daemon
+### 启动 Daemon
 
 ```bash
-# 前台启动（查看日志）
-bb-browser daemon
-
-# 或使用别名
-bb-browser start
+bb-browser daemon    # 前台启动
+bb-browser start     # 别名
 ```
 
-### 2. 基本操作
+### 基本操作
 
 ```bash
 # 打开网页
@@ -70,150 +99,70 @@ bb-browser open https://example.com
 
 # 获取页面快照（可交互元素）
 bb-browser snapshot -i
-
-# 输出示例：
+# 输出:
 # - link "Learn more" [ref=0]
 # - button "Submit" [ref=1]
 # - textbox "Search" [ref=2]
 
-# 点击元素
+# 通过 ref 操作元素
 bb-browser click @0
-
-# 填充输入框
-bb-browser fill @2 "search query"
-
-# 按键
+bb-browser fill @2 "hello world"
 bb-browser press Enter
 ```
 
-### 3. 完整命令列表
+### 命令速查
 
-| 命令 | 说明 | 示例 |
+| 类别 | 命令 | 说明 |
 |------|------|------|
-| `open <url>` | 打开 URL | `bb-browser open https://x.com` |
-| `snapshot` | 获取页面快照 | `bb-browser snapshot -i` |
-| `click <ref>` | 点击元素 | `bb-browser click @5` |
-| `hover <ref>` | 悬停元素 | `bb-browser hover @3` |
-| `fill <ref> <text>` | 填充输入框（清空后填入） | `bb-browser fill @2 "hello"` |
-| `type <ref> <text>` | 逐字符输入（追加） | `bb-browser type @2 " world"` |
-| `check <ref>` | 勾选复选框 | `bb-browser check @7` |
-| `uncheck <ref>` | 取消勾选 | `bb-browser uncheck @7` |
-| `select <ref> <val>` | 下拉框选择 | `bb-browser select @4 "option1"` |
-| `eval "<js>"` | 执行 JavaScript | `bb-browser eval "document.title"` |
-| `get text <ref>` | 获取元素文本 | `bb-browser get text @5` |
-| `get url` | 获取当前 URL | `bb-browser get url` |
-| `get title` | 获取页面标题 | `bb-browser get title` |
-| `screenshot [path]` | 截图 | `bb-browser screenshot ./shot.png` |
-| `wait <ms\|@ref>` | 等待时间或元素 | `bb-browser wait 2000` |
-| `press <key>` | 按键 | `bb-browser press Enter` |
-| `scroll <dir> [px]` | 滚动 | `bb-browser scroll down 500` |
-| `back` | 后退 | `bb-browser back` |
-| `forward` | 前进 | `bb-browser forward` |
-| `refresh` | 刷新 | `bb-browser refresh` |
-| `close` | 关闭标签页 | `bb-browser close` |
+| **导航** | `open <url>` | 打开 URL |
+| | `back` / `forward` / `refresh` | 导航操作 |
+| | `close` | 关闭标签页 |
+| **快照** | `snapshot` | 完整 DOM 树 |
+| | `snapshot -i` | 只看可交互元素 |
+| **交互** | `click <ref>` | 点击 |
+| | `fill <ref> <text>` | 清空后填入 |
+| | `type <ref> <text>` | 逐字符追加 |
+| | `hover <ref>` | 悬停 |
+| | `press <key>` | 按键 |
+| | `scroll <dir> [px]` | 滚动 |
+| | `check` / `uncheck <ref>` | 复选框 |
+| | `select <ref> <val>` | 下拉框 |
+| **信息** | `get text <ref>` | 元素文本 |
+| | `get url` / `get title` | 页面信息 |
+| | `screenshot [path]` | 截图 |
+| | `eval "<js>"` | 执行 JavaScript |
+| **Tab** | `tab` | 列出标签页 |
+| | `tab new <url>` | 新标签页 |
+| | `tab <n>` | 切换标签页 |
+| | `tab close` | 关闭标签页 |
+| **Frame** | `frame "<selector>"` | 进入 iframe |
+| | `frame main` | 回到主 frame |
+| **对话框** | `dialog accept [text]` | 接受 |
+| | `dialog dismiss` | 拒绝 |
+| **网络** | `network requests [filter]` | 查看请求 |
+| | `network route "<pattern>" --abort` | 拦截 |
+| | `network unroute` | 取消拦截 |
+| **调试** | `console` / `errors` | 控制台/错误 |
+| **Daemon** | `daemon` / `start` / `stop` / `status` | 管理 |
 
-### 4. 标签页管理
+### JSON 输出
 
-```bash
-# 列出所有标签页
-bb-browser tab
-
-# 新建标签页
-bb-browser tab new https://google.com
-
-# 切换到第 2 个标签页
-bb-browser tab 2
-
-# 关闭当前标签页
-bb-browser tab close
-```
-
-### 5. iframe 支持
+所有命令支持 `--json` 参数：
 
 ```bash
-# 切换到 iframe（通过选择器）
-bb-browser frame "#iframe-id"
-bb-browser frame "[name='content']"
-
-# 返回主 frame
-bb-browser frame main
-```
-
-### 6. 对话框处理
-
-```bash
-# 接受 alert/confirm
-bb-browser dialog accept
-
-# 接受 prompt 并输入文本
-bb-browser dialog accept "input text"
-
-# 拒绝对话框
-bb-browser dialog dismiss
-```
-
-### 7. 网络监控
-
-```bash
-# 查看网络请求
-bb-browser network requests
-
-# 按关键词过滤
-bb-browser network requests api
-
-# 拦截并阻止请求
-bb-browser network route "*ads*" --abort
-
-# Mock 响应
-bb-browser network route "/api/user" --body '{"name":"test"}'
-
-# 移除拦截规则
-bb-browser network unroute
-
-# 清空请求记录
-bb-browser network clear
-```
-
-### 8. 调试
-
-```bash
-# 查看控制台消息
-bb-browser console
-
-# 清空控制台
-bb-browser console --clear
-
-# 查看 JS 错误
-bb-browser errors
-
-# 清空错误记录
-bb-browser errors --clear
-```
-
-### 9. JSON 输出
-
-所有命令支持 `--json` 参数，方便程序解析：
-
-```bash
-bb-browser snapshot -i --json
-# {"success":true,"data":{"snapshot":"...","refs":{...}}}
-
 bb-browser get url --json
 # {"success":true,"data":"https://example.com"}
 ```
 
-## CDP 开发模式
+### 多 Tab 并发
 
-以 CDP 调试模式启动 Chrome，支持 `reload` 命令热重载扩展：
+每次 `open` 返回独立的 tabId，通过 `--tab` 参数隔离操作：
 
 ```bash
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/chrome-debug-profile
-
-# 然后加载扩展，之后可以热重载
-bb-browser reload
+bb-browser open https://site-a.com    # → tabId: 123
+bb-browser open https://site-b.com    # → tabId: 456
+bb-browser snapshot -i --tab 123      # 操作 site-a
+bb-browser click @0 --tab 456         # 操作 site-b
 ```
 
 ## 项目结构
@@ -221,20 +170,24 @@ bb-browser reload
 ```
 bb-browser/
 ├── packages/
-│   ├── cli/          # CLI 工具
-│   ├── daemon/       # HTTP Daemon（CLI 与扩展的桥梁）
-│   ├── extension/    # Chrome 扩展
-│   └── shared/       # 共享类型
-└── README.md
+│   ├── cli/          # CLI 工具（参数解析、HTTP 客户端、Daemon 管理）
+│   ├── daemon/       # HTTP Daemon（SSE 推送、请求-响应匹配）
+│   ├── extension/    # Chrome 扩展（Manifest V3、chrome.debugger）
+│   └── shared/       # 共享类型和协议定义
+├── skills/           # AI Agent Skill 文档
+├── dist/             # 构建产物（npm 发布）
+└── extension/        # 构建好的扩展（npm 发布）
 ```
 
 ## 技术栈
 
-- **CLI**: TypeScript, Commander.js
-- **Daemon**: Node.js HTTP Server, SSE
-- **Extension**: Chrome Manifest V3, chrome.debugger API
-- **构建**: pnpm, Turbo, Vite, tsup
+| 层 | 技术 |
+|----|------|
+| CLI | TypeScript，手写参数解析 |
+| Daemon | Node.js HTTP Server + SSE |
+| Extension | Chrome Manifest V3 + `chrome.debugger` API |
+| 构建 | pnpm monorepo + Turborepo + tsup + Vite |
 
-## License
+## 许可证
 
-MIT
+[MIT](LICENSE)
