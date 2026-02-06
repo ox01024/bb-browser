@@ -2,7 +2,7 @@
 
 # bb-browser
 
-**面向 AI Agent 的浏览器自动化——复用你的真实浏览器**
+**让 AI Agent 用你的真实浏览器**
 
 [![npm](https://img.shields.io/npm/v/bb-browser?color=CB3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/bb-browser)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
@@ -12,7 +12,7 @@
 
 ---
 
-让 AI Agent 操作你真正在用的浏览器。已登录的 Gmail、Twitter、内部系统——Agent 直接能用。通过 `chrome.debugger` API 操作，绕过 Playwright 等工具的自动化指纹检测。
+你已经登录的 Gmail、Twitter、内部系统——Agent 直接能用。通过 `chrome.debugger` API 操作，绕过自动化指纹检测。
 
 ```
 AI Agent (Claude, GPT, etc.)
