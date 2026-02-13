@@ -257,8 +257,8 @@ export function formatAXTree(
       };
     }
 
-    // link URL 内联
-    if (role === 'link' && node.backendDOMNodeId !== undefined) {
+    // link URL 内联（interactive 模式不需要 URL）
+    if (!options.interactive && role === 'link' && node.backendDOMNodeId !== undefined) {
       const url = urlMap.get(node.backendDOMNodeId);
       if (url) {
         lines.push(line);
@@ -272,6 +272,9 @@ export function formatAXTree(
     }
 
     lines.push(line);
+
+    // interactive 模式：扁平输出，不遍历交互元素的子节点
+    if (options.interactive) return;
 
     // 递归子节点
     for (const childId of node.childIds || []) {
