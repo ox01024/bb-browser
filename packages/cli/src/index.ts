@@ -101,6 +101,9 @@ bb-browser - AI Agent 浏览器自动化工具
 选项：
   --json          以 JSON 格式输出
   -i, --interactive 只输出可交互元素（snapshot 命令）
+  -c, --compact   移除空结构节点（snapshot 命令）
+  -d, --depth <n> 限制树深度（snapshot 命令）
+  -s, --selector <sel> 限定 CSS 选择器范围（snapshot 命令）
   --tab <tabId>   指定操作的标签页 ID
   --help, -h      显示帮助信息
   --version, -v   显示版本号
@@ -127,6 +130,9 @@ interface ParsedArgs {
     help: boolean;
     version: boolean;
     interactive: boolean;
+    compact: boolean;
+    depth?: number;
+    selector?: string;
     tab?: string;
   };
 }
@@ -145,6 +151,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       help: false,
       version: false,
       interactive: false,
+      compact: false,
     },
   };
 
@@ -162,6 +169,20 @@ function parseArgs(argv: string[]): ParsedArgs {
       result.flags.version = true;
     } else if (arg === "--interactive" || arg === "-i") {
       result.flags.interactive = true;
+    } else if (arg === "--compact" || arg === "-c") {
+      result.flags.compact = true;
+    } else if (arg === "--depth" || arg === "-d") {
+      skipNext = true;
+      const nextIdx = args.indexOf(arg) + 1;
+      if (nextIdx < args.length) {
+        result.flags.depth = parseInt(args[nextIdx], 10);
+      }
+    } else if (arg === "--selector" || arg === "-s") {
+      skipNext = true;
+      const nextIdx = args.indexOf(arg) + 1;
+      if (nextIdx < args.length) {
+        result.flags.selector = args[nextIdx];
+      }
     } else if (arg === "--id") {
       // --id 及其值由子命令通过 process.argv 自行解析，这里跳过
       skipNext = true;
@@ -221,7 +242,14 @@ async function main(): Promise<void> {
       }
 
       case "snapshot": {
-        await snapshotCommand({ json: parsed.flags.json, interactive: parsed.flags.interactive, tabId: globalTabId });
+        await snapshotCommand({
+          json: parsed.flags.json,
+          interactive: parsed.flags.interactive,
+          compact: parsed.flags.compact,
+          maxDepth: parsed.flags.depth,
+          selector: parsed.flags.selector,
+          tabId: globalTabId,
+        });
         break;
       }
 

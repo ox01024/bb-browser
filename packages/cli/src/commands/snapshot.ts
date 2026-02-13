@@ -1,6 +1,6 @@
 /**
  * snapshot 命令 - 获取当前页面快照
- * 用法：bb-browser snapshot [-i|--interactive]
+ * 用法：bb-browser snapshot [-i|--interactive] [-c|--compact] [-d|--depth N] [-s|--selector SEL]
  */
 
 import { generateId, type Request, type Response } from "@bb-browser/shared";
@@ -11,6 +11,12 @@ export interface SnapshotOptions {
   json?: boolean;
   /** 只输出可交互元素 */
   interactive?: boolean;
+  /** 移除空结构节点 */
+  compact?: boolean;
+  /** 限制树深度 */
+  maxDepth?: number;
+  /** CSS 选择器范围 */
+  selector?: string;
   tabId?: number;
 }
 
@@ -25,6 +31,9 @@ export async function snapshotCommand(
     id: generateId(),
     action: "snapshot",
     interactive: options.interactive,
+    compact: options.compact,
+    maxDepth: options.maxDepth,
+    selector: options.selector,
     tabId: options.tabId,
   };
 
