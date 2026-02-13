@@ -53,6 +53,10 @@ export interface Request {
   path?: string;
   /** 是否只输出可交互元素（snapshot 命令使用） */
   interactive?: boolean;
+  /** 移除空结构节点（snapshot 命令使用） */
+  compact?: boolean;
+  /** 限制树深度（snapshot 命令使用） */
+  maxDepth?: number;
   /** JavaScript 代码（eval 命令使用） */
   script?: string;
   /** 选项值（select 命令使用） */
@@ -88,14 +92,16 @@ export interface Request {
 
 /** 元素引用信息 */
 export interface RefInfo {
-  /** 元素的 XPath */
-  xpath: string;
+  /** CDP backendDOMNodeId（主定位方式） */
+  backendDOMNodeId?: number;
+  /** 元素的 XPath（向后兼容） */
+  xpath?: string;
   /** 可访问性角色 */
   role: string;
   /** 可访问名称 */
   name?: string;
   /** 标签名 */
-  tagName: string;
+  tagName?: string;
 }
 
 /** 标签页信息 */

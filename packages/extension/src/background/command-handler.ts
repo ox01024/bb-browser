@@ -292,14 +292,17 @@ async function handleSnapshot(command: CommandEvent): Promise<CommandResult> {
     };
   }
 
-  // 获取 interactive 参数，默认 false（完整树模式）
+  // 提取 snapshot 参数
   const interactive = command.interactive as boolean | undefined;
+  const compact = command.compact as boolean | undefined;
+  const maxDepth = command.maxDepth as number | undefined;
+  // snapshot 复用 selector 字段（也被 frame 命令使用）
+  const selector = command.selector as string | undefined;
 
-  console.log('[CommandHandler] Taking snapshot of tab:', activeTab.id, activeTab.url, { interactive });
+  console.log('[CommandHandler] Taking snapshot of tab:', activeTab.id, activeTab.url, { interactive, compact, maxDepth, selector });
 
   try {
-    // v2.0: 使用 CDP DOM Service 获取快照
-    const snapshotResult = await cdpDom.getSnapshot(activeTab.id, { interactive });
+    const snapshotResult = await cdpDom.getSnapshot(activeTab.id, { interactive, compact, maxDepth, selector });
 
     return {
       id: command.id,
