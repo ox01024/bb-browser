@@ -6,17 +6,18 @@
  *   bb-browser stop      停止 Daemon
  */
 
-import { isDaemonRunning, stopDaemon } from "../daemon-manager.js";
+import { pathToFileURL } from "node:url";
+import { getDaemonPath, isDaemonRunning, stopDaemon } from "../daemon-manager.js";
 
 export interface DaemonOptions {
   json?: boolean;
 }
 
-/**
- * 前台启动 Daemon
- * 注意：实际的 Daemon 逻辑在 @bb-browser/daemon 包中
- * 此命令作为入口，启动 daemon 包的主函数
- */
+interface DaemonModule {
+  startDaemon: (args?: string[]) => Promise<void>;
+}
+
+/** 前台启动 Daemon */
 export async function daemonCommand(
   options: DaemonOptions = {}
 ): Promise<void> {
@@ -30,17 +31,25 @@ export async function daemonCommand(
     return;
   }
 
-  // 动态导入 daemon 包并启动
+  // 加载 daemon 入口文件并在当前进程启动
   try {
-    const { startDaemon } = await import("@bb-browser/daemon");
-    
+    const daemonPath = getDaemonPath();
+
     if (options.json) {
       console.log(JSON.stringify({ success: true, message: "Daemon 启动中..." }));
     } else {
       console.log("Daemon 启动中...");
     }
-    
-    await startDaemon();
+
+    const daemonModule = (await import(
+      pathToFileURL(daemonPath).href
+    )) as Partial<DaemonModule>;
+
+    if (typeof daemonModule.startDaemon !== "function") {
+      throw new Error(`Daemon 模块未导出 startDaemon: ${daemonPath}`);
+    }
+
+    await daemonModule.startDaemon([]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     

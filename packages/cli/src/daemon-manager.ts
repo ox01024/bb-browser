@@ -9,18 +9,26 @@ import { dirname, resolve } from "node:path";
 import { DAEMON_BASE_URL } from "@bb-browser/shared";
 
 /** 获取 daemon dist 路径 */
-function getDaemonPath(): string {
+export function getDaemonPath(): string {
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = dirname(currentFile);
-  
-  // npm 发布后：cli.js 和 daemon.js 在同一目录 (dist/)
+
   const sameDirPath = resolve(currentDir, "daemon.js");
+  const workspacePath = resolve(currentDir, "../../daemon/dist/index.js");
+
+  // npm 发布后：cli.js 和 daemon.js 在同一目录 (dist/)
   if (existsSync(sameDirPath)) {
     return sameDirPath;
   }
-  
+
   // 开发模式：CLI dist 在 packages/cli/dist/，Daemon dist 在 packages/daemon/dist/
-  return resolve(currentDir, "../../daemon/dist/index.js");
+  if (existsSync(workspacePath)) {
+    return workspacePath;
+  }
+
+  throw new Error(
+    `找不到 Daemon 入口文件。已尝试:\n- ${sameDirPath}\n- ${workspacePath}`
+  );
 }
 
 /** Daemon 启动超时时间（毫秒） */

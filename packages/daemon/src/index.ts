@@ -12,6 +12,8 @@
 
 import { parseArgs } from "node:util";
 import { writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DAEMON_PORT } from "@bb-browser/shared";
 import { HttpServer } from "./http-server.js";
 
@@ -24,8 +26,9 @@ interface DaemonOptions {
 /**
  * 解析命令行参数
  */
-function parseOptions(): DaemonOptions {
+function parseOptions(args: string[] = process.argv.slice(2)): DaemonOptions {
   const { values } = parseArgs({
+    args,
     options: {
       port: {
         type: "string",
@@ -86,10 +89,10 @@ function cleanupPidFile(): void {
 }
 
 /**
- * 主函数
+ * 启动 Daemon
  */
-async function main(): Promise<void> {
-  const options = parseOptions();
+export async function startDaemon(args: string[] = process.argv.slice(2)): Promise<void> {
+  const options = parseOptions(args);
 
   // 优雅关闭
   const shutdown = async () => {
@@ -118,9 +121,18 @@ async function main(): Promise<void> {
   console.error("[Daemon] Waiting for extension connection...");
 }
 
-// 启动 Daemon
-main().catch((error) => {
+function handleFatalError(error: unknown): never {
   console.error("[Daemon] Fatal error:", error);
   cleanupPidFile();
   process.exit(1);
-});
+}
+
+function isDirectExecution(): boolean {
+  const entryPath = process.argv[1];
+  if (!entryPath) return false;
+  return resolve(entryPath) === fileURLToPath(import.meta.url);
+}
+
+if (isDirectExecution()) {
+  startDaemon().catch(handleFatalError);
+}
