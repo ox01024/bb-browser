@@ -1,7 +1,7 @@
 {
   "name": "bb-browser",
   "version": "0.4.2",
-  "description": "AI Agent browser automation CLI - control Chrome with user's login state",
+  "description": "Your browser is the API. CLI + MCP server for AI agents to control Chrome with your login state.",
   "type": "module",
   "bin": {
     "bb-browser": "./dist/cli.js",
