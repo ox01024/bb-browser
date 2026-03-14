@@ -462,10 +462,9 @@ export async function siteCommand(
   bb-browser site twitter/user yan5xu
   bb-browser site search reddit
 
-Adapter 结果不符合预期？报告问题：
-  gh issue create --repo epiral/bb-sites --title "[adapter-name] 描述"
-  或: https://github.com/epiral/bb-sites/issues
-贡献新 adapter: https://github.com/epiral/bb-sites`);
+创建新 adapter: bb-browser guide
+报告问题: gh issue create --repo epiral/bb-sites --title "[adapter-name] 描述"
+贡献社区: https://github.com/epiral/bb-sites`);
     return;
   }
 
