@@ -24,6 +24,32 @@ interface PendingCommand {
   method: string;
 }
 
+interface RawDomTextNode {
+  type: "TEXT_NODE";
+  text: string;
+  isVisible: boolean;
+}
+
+interface RawDomElementNode {
+  tagName: string;
+  xpath: string | null;
+  attributes: Record<string, string>;
+  children: string[];
+  isVisible?: boolean;
+  isInteractive?: boolean;
+  isTopElement?: boolean;
+  isInViewport?: boolean;
+  highlightIndex?: number;
+  shadowRoot?: boolean;
+}
+
+type RawDomTreeNode = RawDomTextNode | RawDomElementNode;
+
+interface BuildDomTreeResult {
+  rootId: string;
+  map: Record<string, RawDomTreeNode>;
+}
+
 interface DialogHandlerConfig {
   accept: boolean;
   promptText?: string;
@@ -106,7 +132,10 @@ function connectWebSocket(url: string): Promise<WebSocket> {
     const ws = new WebSocket(url);
     ws.once("open", () => {
       // Allow Node.js to exit even if the WebSocket is still open
-      (ws as any)._socket?.unref?.();
+      const socket = (ws as any)._socket;
+      if (socket && typeof socket.unref === "function") {
+        socket.unref();
+      }
       resolve(ws);
     });
     ws.once("error", reject);
@@ -406,6 +435,12 @@ async function ensurePageTarget(targetId?: string | number): Promise<CdpTargetIn
     target = targets[targetId] ?? targets.find((item) => Number(item.id) === targetId);
   } else if (typeof targetId === "string") {
     target = targets.find((item) => item.id === targetId);
+    if (!target) {
+      const numericTargetId = Number(targetId);
+      if (!Number.isNaN(numericTargetId)) {
+        target = targets[numericTargetId] ?? targets.find((item) => Number(item.id) === numericTargetId);
+      }
+    }
   }
   target ??= targets[0];
   connectionState!.currentTargetId = target.id;
@@ -425,10 +460,19 @@ function parseRef(ref: string): number {
 function loadBuildDomTreeScript(): string {
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    path.resolve(currentDir, "./extension/buildDomTree.js"),
+    // npm installed: dist/cli.js → ../extension/buildDomTree.js
+    path.resolve(currentDir, "../extension/buildDomTree.js"),
+    path.resolve(currentDir, "../extension/dist/buildDomTree.js"),
+    path.resolve(currentDir, "../packages/extension/public/buildDomTree.js"),
+    path.resolve(currentDir, "../packages/extension/dist/buildDomTree.js"),
+    // dev mode: packages/cli/dist/ → ../../../extension/
     path.resolve(currentDir, "../../../extension/buildDomTree.js"),
-    path.resolve(currentDir, "../../extension/buildDomTree.js"),
-    path.resolve(currentDir, "../../../packages/extension/buildDomTree.js"),
     path.resolve(currentDir, "../../../extension/dist/buildDomTree.js"),
+    // dev mode: packages/cli/src/ → ../../extension/
+    path.resolve(currentDir, "../../extension/buildDomTree.js"),
+    path.resolve(currentDir, "../../../packages/extension/dist/buildDomTree.js"),
+    path.resolve(currentDir, "../../../packages/extension/public/buildDomTree.js"),
   ];
   for (const candidate of candidates) {
     try {
@@ -498,15 +542,159 @@ async function getAttributeValue(targetId: string, backendNodeId: number, attrib
 
 async function buildSnapshot(targetId: string, request: Request): Promise<SnapshotData> {
   const script = loadBuildDomTreeScript();
-  const expression = `(() => { ${script}; return (typeof buildDomTree === 'function' ? buildDomTree : globalThis.buildDomTree)(${JSON.stringify({
+  const buildArgs = {
+    showHighlightElements: true,
+    focusHighlightIndex: -1,
+    viewportExpansion: -1,
+    debugMode: false,
+    startId: 0,
+    startHighlightIndex: 0,
+  };
+  const expression = `(() => { ${script}; const fn = globalThis.buildDomTree ?? (typeof window !== 'undefined' ? window.buildDomTree : undefined); if (typeof fn !== 'function') { throw new Error('buildDomTree is not available after script injection'); } return fn(${JSON.stringify({
+    ...buildArgs,
+  })}); })()`;
+  const value = await evaluate<BuildDomTreeResult | null>(targetId, expression, true);
+  if (!value || !value.map || !value.rootId) {
+    throw new Error("Failed to build DOM tree: invalid result structure");
+  }
+
+  const snapshot = convertBuildDomTreeResult(value, {
     interactiveOnly: !!request.interactive,
     compact: !!request.compact,
     maxDepth: request.maxDepth,
     selector: request.selector,
-  })}); })()`;
-  const value = await evaluate<SnapshotData>(targetId, expression, true);
-  connectionState?.refsByTarget.set(targetId, value.refs || {});
-  return value;
+  });
+  connectionState?.refsByTarget.set(targetId, snapshot.refs || {});
+  return snapshot;
+}
+
+function convertBuildDomTreeResult(
+  result: BuildDomTreeResult,
+  options: { interactiveOnly: boolean; compact: boolean; maxDepth?: number; selector?: string },
+): SnapshotData {
+  const { interactiveOnly, compact, maxDepth, selector } = options;
+  const { rootId, map } = result;
+  const refs: Record<string, RefInfo> = {};
+  const lines: string[] = [];
+
+  const getRole = (node: RawDomElementNode): string => {
+    const tagName = node.tagName.toLowerCase();
+    const role = node.attributes?.role;
+    if (role) return role;
+    const type = node.attributes?.type?.toLowerCase() || "text";
+    const inputRoleMap: Record<string, string> = {
+      text: "textbox", password: "textbox", email: "textbox", url: "textbox", tel: "textbox",
+      search: "searchbox", number: "spinbutton", range: "slider", checkbox: "checkbox",
+      radio: "radio", button: "button", submit: "button", reset: "button", file: "button",
+    };
+    const roleMap: Record<string, string> = {
+      a: "link", button: "button", input: inputRoleMap[type] || "textbox", select: "combobox",
+      textarea: "textbox", img: "image", nav: "navigation", main: "main", header: "banner",
+      footer: "contentinfo", aside: "complementary", form: "form", table: "table", ul: "list",
+      ol: "list", li: "listitem", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+      h5: "heading", h6: "heading", dialog: "dialog", article: "article", section: "region",
+      label: "label", details: "group", summary: "button",
+    };
+    return roleMap[tagName] || tagName;
+  };
+
+  const collectTextContent = (node: RawDomElementNode, nodeMap: Record<string, RawDomTreeNode>, depthLimit = 5): string => {
+    const texts: string[] = [];
+    const visit = (nodeId: string, depth: number): void => {
+      if (depth > depthLimit) return;
+      const currentNode = nodeMap[nodeId];
+      if (!currentNode) return;
+      if ("type" in currentNode && currentNode.type === "TEXT_NODE") {
+        const text = currentNode.text.trim();
+        if (text) texts.push(text);
+        return;
+      }
+      for (const childId of (currentNode as RawDomElementNode).children || []) visit(childId, depth + 1);
+    };
+    for (const childId of node.children || []) visit(childId, 0);
+    return texts.join(" ").trim();
+  };
+
+  const getName = (node: RawDomElementNode): string | undefined => {
+    const attrs = node.attributes || {};
+    return attrs["aria-label"] || attrs.title || attrs.placeholder || attrs.alt || attrs.value || collectTextContent(node, map) || attrs.name || undefined;
+  };
+
+  const truncateText = (text: string, length = 50): string => text.length <= length ? text : `${text.slice(0, length - 3)}...`;
+
+  const selectorText = selector?.trim().toLowerCase();
+  const matchesSelector = (node: RawDomElementNode, role: string, name?: string): boolean => {
+    if (!selectorText) return true;
+    const haystack = [node.tagName, role, name, node.xpath || "", ...Object.values(node.attributes || {})].join(" ").toLowerCase();
+    return haystack.includes(selectorText);
+  };
+
+  if (interactiveOnly) {
+    const interactiveNodes = Object.entries(map)
+      .filter(([, node]) => !("type" in node) && node.highlightIndex !== undefined && node.highlightIndex !== null)
+      .map(([id, node]) => ({ id, node: node as RawDomElementNode }))
+      .sort((a, b) => (a.node.highlightIndex ?? 0) - (b.node.highlightIndex ?? 0));
+
+    for (const { node } of interactiveNodes) {
+      const refId = String(node.highlightIndex);
+      const role = getRole(node);
+      const name = getName(node);
+      if (!matchesSelector(node, role, name)) continue;
+      let line = `${role} [ref=${refId}]`;
+      if (name) line += ` ${JSON.stringify(truncateText(name))}`;
+      lines.push(line);
+      refs[refId] = {
+        xpath: node.xpath || "",
+        role,
+        name,
+        tagName: node.tagName.toLowerCase(),
+      } as RefInfo;
+    }
+
+    return { snapshot: lines.join("\n"), refs };
+  }
+
+  const walk = (nodeId: string, depth: number): void => {
+    if (maxDepth !== undefined && depth > maxDepth) return;
+    const node = map[nodeId];
+    if (!node) return;
+
+    if ("type" in node && node.type === "TEXT_NODE") {
+      const text = node.text.trim();
+      if (!text) return;
+      lines.push(`${"  ".repeat(depth)}- text ${JSON.stringify(truncateText(text, compact ? 80 : 120))}`);
+      return;
+    }
+
+    const role = getRole(node);
+    const name = getName(node);
+    if (!matchesSelector(node, role, name)) {
+      for (const childId of node.children || []) walk(childId, depth + 1);
+      return;
+    }
+
+    const indent = "  ".repeat(depth);
+    const refId = node.highlightIndex !== undefined && node.highlightIndex !== null ? String(node.highlightIndex) : null;
+    let line = `${indent}- ${role}`;
+    if (refId) line += ` [ref=${refId}]`;
+    if (name) line += ` ${JSON.stringify(truncateText(name, compact ? 50 : 80))}`;
+    if (!compact) line += ` <${node.tagName.toLowerCase()}>`;
+    lines.push(line);
+
+    if (refId) {
+      refs[refId] = {
+        xpath: node.xpath || "",
+        role,
+        name,
+        tagName: node.tagName.toLowerCase(),
+      } as RefInfo;
+    }
+
+    for (const childId of node.children || []) walk(childId, depth + 1);
+  };
+
+  walk(rootId, 0);
+  return { snapshot: lines.join("\n"), refs };
 }
 
 function ok(id: string, data?: ResponseData): Response {
@@ -556,10 +744,10 @@ async function dispatchRequest(request: Request): Promise<Response> {
       if (request.tabId === undefined) {
         const created = await browserCommand<{ targetId: string }>("Target.createTarget", { url: request.url });
         const newTarget = await ensurePageTarget(created.targetId);
-        return ok(request.id, { url: request.url, tabId: Number(newTarget.id) || undefined });
+        return ok(request.id, { url: request.url, tabId: newTarget.id });
       }
       await pageCommand(target.id, "Page.navigate", { url: request.url });
-      return ok(request.id, { url: request.url, title: target.title, tabId: Number(target.id) || undefined });
+      return ok(request.id, { url: request.url, title: target.title, tabId: target.id });
     }
     case "snapshot": {
       const snapshotData = await buildSnapshot(target.id, request);
@@ -657,12 +845,12 @@ async function dispatchRequest(request: Request): Promise<Response> {
       return ok(request.id, { result });
     }
     case "tab_list": {
-      const tabs = (await getTargets()).filter((item) => item.type === "page").map((item, index): TabInfo => ({ index, url: item.url, title: item.title, active: item.id === connectionState?.currentTargetId || (!connectionState?.currentTargetId && index === 0), tabId: Number(item.id) || index }));
+      const tabs = (await getTargets()).filter((item) => item.type === "page").map((item, index): TabInfo => ({ index, url: item.url, title: item.title, active: item.id === connectionState?.currentTargetId || (!connectionState?.currentTargetId && index === 0), tabId: item.id }));
       return ok(request.id, { tabs, activeIndex: tabs.findIndex((tab) => tab.active) });
     }
     case "tab_new": {
       const created = await browserCommand<{ targetId: string }>("Target.createTarget", { url: request.url ?? "about:blank" });
-      return ok(request.id, { tabId: Number(created.targetId) || undefined, url: request.url ?? "about:blank" });
+      return ok(request.id, { tabId: created.targetId, url: request.url ?? "about:blank" });
     }
     case "tab_select": {
       const tabs = (await getTargets()).filter((item) => item.type === "page");
@@ -672,7 +860,7 @@ async function dispatchRequest(request: Request): Promise<Response> {
       if (!selected) return fail(request.id, "Tab not found");
       connectionState!.currentTargetId = selected.id;
       await attachTarget(selected.id);
-      return ok(request.id, { tabId: Number(selected.id) || undefined, url: selected.url, title: selected.title });
+      return ok(request.id, { tabId: selected.id, url: selected.url, title: selected.title });
     }
     case "tab_close": {
       const tabs = (await getTargets()).filter((item) => item.type === "page");
@@ -681,7 +869,7 @@ async function dispatchRequest(request: Request): Promise<Response> {
         : tabs[request.index ?? 0];
       if (!selected) return fail(request.id, "Tab not found");
       await browserCommand("Target.closeTarget", { targetId: selected.id });
-      return ok(request.id, { tabId: Number(selected.id) || undefined });
+      return ok(request.id, { tabId: selected.id });
     }
     case "frame": {
       if (!request.selector) return fail(request.id, "Missing selector parameter");
