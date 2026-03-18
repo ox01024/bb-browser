@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { parseOpenClawJson } from "./openclaw-json.js";
 
 const DEFAULT_CDP_PORT = 19825;
 const MANAGED_BROWSER_DIR = path.join(os.homedir(), ".bb-browser", "browser");
@@ -30,7 +31,7 @@ function getArgValue(flag: string): string | undefined {
 async function tryOpenClaw(): Promise<{ host: string; port: number } | null> {
   try {
     const raw = await execFileAsync("npx", ["openclaw", "browser", "status", "--json"], 5000);
-    const parsed = JSON.parse(raw);
+    const parsed = parseOpenClawJson<{ cdpPort?: number | string }>(raw);
     const port = Number(parsed?.cdpPort);
     if (Number.isInteger(port) && port > 0) {
       return { host: "127.0.0.1", port };

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { parseOpenClawJson } from "./openclaw-json.js";
 
 export interface OCTab {
   targetId: string;
@@ -17,7 +18,7 @@ function runOpenClaw(args: string[], timeout: number): string {
 
 export function ocGetTabs(): OCTab[] {
   const raw = runOpenClaw(["tabs", "--json"], 15000);
-  const data = JSON.parse(raw);
+  const data = parseOpenClawJson<{ tabs?: OCTab[] }>(raw);
   return (data.tabs || []).filter((tab: OCTab) => tab.type === "page");
 }
 
@@ -34,11 +35,11 @@ export function ocFindTabByDomain(tabs: OCTab[], domain: string): OCTab | undefi
 
 export function ocOpenTab(url: string): string {
   const raw = runOpenClaw(["open", url, "--json"], 30000);
-  const data = JSON.parse(raw);
+  const data = parseOpenClawJson<{ id?: string; targetId?: string }>(raw);
   return data.id || data.targetId;
 }
 
 export function ocEvaluate(targetId: string, fn: string): unknown {
   const raw = runOpenClaw(["evaluate", "--fn", fn, "--target-id", targetId], 30000);
-  return JSON.parse(raw);
+  return parseOpenClawJson(raw);
 }
