@@ -23,11 +23,13 @@ function tryParseJson<T>(raw: string): ParseSuccess<T> | ParseFailure {
   }
 }
 
-function tryParseLineSlices<T>(raw: string): ParseSuccess<T> | null {
+function tryParseLastJsonLineBlock<T>(raw: string): ParseSuccess<T> | null {
   const lines = raw.split(/\r?\n/);
 
-  for (let start = lines.length - 1; start >= 0; start -= 1) {
-    for (let end = lines.length; end > start; end -= 1) {
+  // OpenClaw diagnostics are emitted as extra lines around the JSON payload,
+  // so prefer the last contiguous block of lines that parses cleanly as JSON.
+  for (let end = lines.length; end > 0; end -= 1) {
+    for (let start = end - 1; start >= 0; start -= 1) {
       const candidate = lines.slice(start, end).join("\n").trim();
       if (!candidate) {
         continue;
@@ -36,59 +38,6 @@ function tryParseLineSlices<T>(raw: string): ParseSuccess<T> | null {
       const parsed = tryParseJson<T>(candidate);
       if (parsed.ok) {
         return parsed;
-      }
-    }
-  }
-
-  return null;
-}
-
-function extractTopLevelJson(raw: string, start: number): string | null {
-  const opener = raw[start];
-  const expectedCloser = opener === "{" ? "}" : opener === "[" ? "]" : null;
-  if (!expectedCloser) {
-    return null;
-  }
-
-  const stack = [expectedCloser];
-  let inString = false;
-  let escaped = false;
-
-  for (let index = start + 1; index < raw.length; index += 1) {
-    const char = raw[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{" || char === "[") {
-      stack.push(char === "{" ? "}" : "]");
-      continue;
-    }
-
-    if (char === "}" || char === "]") {
-      const expected = stack.pop();
-      if (expected !== char) {
-        return null;
-      }
-      if (stack.length === 0) {
-        return raw.slice(start, index + 1);
       }
     }
   }
@@ -107,26 +56,9 @@ export function parseOpenClawJson<T>(raw: string): T {
     return direct.value;
   }
 
-  const fromLines = tryParseLineSlices<T>(trimmed);
-  if (fromLines) {
-    return fromLines.value;
-  }
-
-  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
-    const char = trimmed[index];
-    if (char !== "{" && char !== "[") {
-      continue;
-    }
-
-    const candidate = extractTopLevelJson(trimmed, index);
-    if (!candidate) {
-      continue;
-    }
-
-    const parsed = tryParseJson<T>(candidate);
-    if (parsed.ok) {
-      return parsed.value;
-    }
+  const lineBlock = tryParseLastJsonLineBlock<T>(trimmed);
+  if (lineBlock) {
+    return lineBlock.value;
   }
 
   throw new Error(`Failed to parse OpenClaw JSON output: ${direct.error.message}\nRaw (preview): ${buildPreview(trimmed)}`);
