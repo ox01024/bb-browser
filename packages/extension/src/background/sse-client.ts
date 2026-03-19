@@ -3,7 +3,7 @@
  * 使用 fetch + ReadableStream 实现，兼容 Service Worker (Manifest V3)
  */
 
-import { getUpstreamUrl, SSE_RECONNECT_DELAY, SSE_MAX_RECONNECT_ATTEMPTS } from './constants';
+import { getUpstreamUrl, SSE_RECONNECT_DELAY } from './constants';
 
 export interface SSEEvent {
   type: 'connected' | 'heartbeat' | 'command';

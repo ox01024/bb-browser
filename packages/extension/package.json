@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
-    "build": "vite build"
+    "build": "vite build",
+    "lint": "eslint src vite.config.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",

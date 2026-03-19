@@ -227,7 +227,7 @@ export async function ensureAttached(tabId: number): Promise<void> {
     await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
     
     console.log('[CDPService] Attached to tab:', tabId);
-  } catch (error) {
+  } catch {
     const msg = error instanceof Error ? error.message : String(error);
     // 如果已经 attached，忽略错误
     if (msg.includes('Another debugger is already attached')) {
@@ -251,7 +251,7 @@ export async function detach(tabId: number): Promise<void> {
     attachedTabs.delete(tabId);
     pendingDialogs.delete(tabId);
     console.log('[CDPService] Detached from tab:', tabId);
-  } catch (error) {
+  } catch {
     // 忽略 detach 错误
     attachedTabs.delete(tabId);
   }
@@ -747,7 +747,7 @@ export async function disableNetwork(tabId: number): Promise<void> {
   try {
     await sendCommand(tabId, 'Fetch.disable');
     await sendCommand(tabId, 'Network.disable');
-  } catch (e) {
+  } catch {
     // 忽略错误
   }
   

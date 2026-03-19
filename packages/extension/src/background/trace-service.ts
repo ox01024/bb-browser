@@ -57,7 +57,7 @@ export async function startRecording(tabId: number): Promise<void> {
   // 通知 content script 开始录制
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'TRACE_START' });
-  } catch (error) {
+  } catch {
     // Content script 可能尚未加载，注入它
     console.log('[TraceService] Content script not ready, will record on next event');
   }

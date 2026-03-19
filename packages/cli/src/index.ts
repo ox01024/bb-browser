@@ -29,6 +29,7 @@ import { traceCommand } from "./commands/trace.js";
 import { fetchCommand } from "./commands/fetch.js";
 import { siteCommand } from "./commands/site.js";
 import { historyCommand } from "./commands/history.js";
+import { statusCommand } from "./commands/daemon.js";
 import { setJqExpression } from "./client.js";
 
 declare const __BB_BROWSER_VERSION__: string;
@@ -407,6 +408,10 @@ async function main(): Promise<void> {
       }
 
       case "daemon":
+      case "status": {
+        await statusCommand({ json: parsed.flags.json });
+        break;
+      }
 
       case "close": {
         await closeCommand({ json: parsed.flags.json, tabId: globalTabId });

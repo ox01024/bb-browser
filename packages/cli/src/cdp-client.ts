@@ -518,14 +518,6 @@ function getRefsFilePath(targetId: string): string {
   return path.join(os.tmpdir(), `bb-browser-refs-${targetId}.json`);
 }
 
-function getCurrentTargetUrl(targetId: string): string | null {
-  const state = connectionState;
-  if (!state) return null;
-  const pages = Array.from(state.sessions.keys());
-  void pages;
-  return null;
-}
-
 function loadPersistedRefs(targetId: string, expectedUrl?: string): Record<string, RefInfo> | null {
   try {
     const data = JSON.parse(readFileSync(getRefsFilePath(targetId), "utf-8")) as {

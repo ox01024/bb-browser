@@ -11,7 +11,7 @@
  */
 
 import * as cdp from './cdp-service';
-import { formatAXTree, type AXRefInfo } from './ax-tree-formatter';
+import { formatAXTree } from './ax-tree-formatter';
 
 // ============================================================================
 // 类型定义

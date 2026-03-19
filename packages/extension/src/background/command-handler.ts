@@ -244,7 +244,7 @@ async function handleOpen(command: CommandEvent): Promise<CommandResult> {
 
     try {
       tab = await chrome.tabs.update(targetTabId, { url, active: true });
-    } catch (error) {
+    } catch {
       return {
         id: command.id,
         success: false,
@@ -1625,7 +1625,7 @@ async function handleFrame(command: CommandEvent): Promise<CommandResult> {
         target: { tabId, frameIds: [targetFrameId] },
         func: () => true,
       });
-    } catch (e) {
+    } catch {
       return {
         id: command.id,
         success: false,
