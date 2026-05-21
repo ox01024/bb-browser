@@ -267,7 +267,7 @@ video { max-width: 100%; max-height: 100%; object-fit: contain; background: #000
 <body>
 <div id="app">
   <div id="toolbar">
-    <span style="font-size:13px;color:#888;margin-right:auto">Remote Browser</span>
+    <span style="font-size:13px;color:#888;margin-right:auto">Remote Browser <span style="color:#555;font-size:10px">v9</span></span>
     <button id="btn-connect">Connect</button>
   </div>
   <div id="tab-bar">
@@ -648,8 +648,13 @@ urlInput.addEventListener("keydown", (e) => {
   }
 }, true);
 urlInput.addEventListener("keyup", (e) => {
+  // Let modifier key releases propagate to document so onKeyUp can
+  // forward them to the remote and clear the stuck modifier state.
+  if (e.key === "Meta" || e.key === "Control" || e.key === "Shift" || e.key === "Alt") return;
   e.stopPropagation();
 }, true);
+
+
 
 // --- Binary protocol helpers ---
 function packHeader(opcode, payloadLen) {
@@ -826,13 +831,15 @@ function onKeyDown(e) {
 function onKeyUp(e) {
   if (!connected) return;
   if (e.isComposing || e.keyCode === 229) return;
-  if (document.activeElement === urlInput) return;
-  e.preventDefault();
   const ks = keyToKeysym(e);
-  if (ks) {
-    debugLog("input", "key_up", { key: e.key, code: e.code, keysym: ks });
-    sendKeyUp(ks);
-  }
+  if (!ks) return;
+  // Always forward modifier key releases even when URL input is focused,
+  // so the remote doesn't get stuck with a modifier held down.
+  const isModifier = ks >= 0xFFE1 && ks <= 0xFFEE;
+  if (document.activeElement === urlInput && !isModifier) return;
+  e.preventDefault();
+  debugLog("input", "key_up", { key: e.key, code: e.code, keysym: ks });
+  sendKeyUp(ks);
 }
 
 function onCompositionStart() { isComposing = true; debugLog("input", "composition_start"); }
@@ -1026,8 +1033,21 @@ btnConnect.addEventListener("click", () => {
   else connect();
 });
 
-// Focus IME input on overlay click
-inputOverlay.addEventListener("click", () => { imeInput.focus(); });
+// Focus IME input on overlay click + release all modifiers to clear any
+// stuck state from when focus was elsewhere (URL bar, toolbar, etc.)
+inputOverlay.addEventListener("click", () => {
+  imeInput.focus();
+  const mods = [0xFFE1, 0xFFE2, 0xFFE3, 0xFFE4, 0xFFE9, 0xFFEA, 0xFFEB, 0xFFEC];
+  for (const ks of mods) sendKeyUp(ks);
+});
+
+// Reset all modifier keys when window regains focus — handles Cmd+Tab
+// and other cases where keyUp fires outside our page.
+window.addEventListener("focus", () => {
+  if (!connected) return;
+  const mods = [0xFFE1, 0xFFE2, 0xFFE3, 0xFFE4, 0xFFE9, 0xFFEA, 0xFFEB, 0xFFEC];
+  for (const ks of mods) sendKeyUp(ks);
+});
 
 // Cleanup on page unload
 window.addEventListener("beforeunload", () => {
