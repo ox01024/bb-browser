@@ -31,6 +31,211 @@ export interface CdpTargetInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Stealth — hide headless/automation fingerprints
+// ---------------------------------------------------------------------------
+
+const STEALTH_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.7778.168 Safari/537.36";
+
+const STEALTH_UA_METADATA = {
+  brands: [
+    { brand: "Chromium", version: "148" },
+    { brand: "Google Chrome", version: "148" },
+    { brand: "Not.A/Brand", version: "24" },
+  ],
+  fullVersionList: [
+    { brand: "Chromium", version: "148.0.7778.168" },
+    { brand: "Google Chrome", version: "148.0.7778.168" },
+    { brand: "Not.A/Brand", version: "24.0.0.0" },
+  ],
+  platform: "macOS",
+  platformVersion: "10.15.7",
+  architecture: "x86",
+  bitness: "64",
+  model: "",
+  mobile: false,
+  wow64: false,
+};
+
+const STEALTH_SCRIPT = `
+(() => {
+  if (window.__bbStealthApplied) return;
+  try { Object.defineProperty(window, '__bbStealthApplied', { value: true, configurable: false }); }
+  catch (e) { window.__bbStealthApplied = true; }
+
+  const define = (obj, name, value) => {
+    try {
+      Object.defineProperty(obj, name, { get: () => value, configurable: true });
+    } catch (e) {}
+  };
+
+  try {
+    define(Navigator.prototype, 'webdriver', undefined);
+  } catch (e) {}
+  define(navigator, 'webdriver', undefined);
+  define(navigator, 'languages', ['zh-CN', 'zh', 'en-US', 'en']);
+  define(navigator, 'language', 'zh-CN');
+  define(navigator, 'platform', 'MacIntel');
+  define(navigator, 'hardwareConcurrency', 8);
+  define(navigator, 'deviceMemory', 8);
+
+  const fakePlugin = (name, filename, description) => {
+    const plugin = { name, filename, description, length: 1 };
+    plugin[0] = { type: 'application/pdf', suffixes: 'pdf', description, enabledPlugin: plugin };
+    return plugin;
+  };
+  try {
+    const plugins = [
+      fakePlugin('PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+      fakePlugin('Chrome PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+      fakePlugin('Chromium PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+    ];
+    plugins.item = (i) => plugins[i] || null;
+    plugins.namedItem = (name) => plugins.find((p) => p.name === name) || null;
+    plugins.refresh = () => {};
+    Object.setPrototypeOf(plugins, PluginArray.prototype);
+    define(navigator, 'plugins', plugins);
+
+    const mimeTypes = [{
+      type: 'application/pdf',
+      suffixes: 'pdf',
+      description: 'Portable Document Format',
+      enabledPlugin: plugins[0],
+    }];
+    mimeTypes.item = (i) => mimeTypes[i] || null;
+    mimeTypes.namedItem = (name) => mimeTypes.find((m) => m.type === name) || null;
+    Object.setPrototypeOf(mimeTypes, MimeTypeArray.prototype);
+    define(navigator, 'mimeTypes', mimeTypes);
+  } catch (e) {}
+
+  try {
+    window.chrome = window.chrome || {};
+    window.chrome.runtime = window.chrome.runtime || {};
+    window.chrome.app = window.chrome.app || {
+      isInstalled: false,
+      InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+      RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+    };
+    window.chrome.csi = window.chrome.csi || function () { return { onloadT: Date.now(), startE: Date.now() }; };
+    window.chrome.loadTimes = window.chrome.loadTimes || function () { return {}; };
+  } catch (e) {}
+
+  try {
+    const origQuery = navigator.permissions && navigator.permissions.query;
+    if (origQuery) {
+      navigator.permissions.query = (params) =>
+        params && params.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission || 'prompt', onchange: null })
+          : origQuery.call(navigator.permissions, params);
+    }
+  } catch (e) {}
+
+  const overrideGetParameter = (proto) => {
+    if (!proto || !proto.getParameter) return;
+    const original = proto.getParameter;
+    proto.getParameter = function (param) {
+      if (param === 37445) return 'Intel Inc.';
+      if (param === 37446) return 'Intel Iris OpenGL Engine';
+      return original.apply(this, [param]);
+    };
+  };
+  try { overrideGetParameter(WebGLRenderingContext.prototype); } catch (e) {}
+  try { overrideGetParameter(WebGL2RenderingContext.prototype); } catch (e) {}
+
+  try {
+    if (typeof Notification !== 'undefined') {
+      define(Notification, 'permission', 'default');
+      Notification.requestPermission = function () {
+        return new Promise((resolve) => setTimeout(() => resolve('default'), 120));
+      };
+    }
+  } catch (e) {}
+
+  // Per-session stable seed for canvas/WebGL/audio fingerprint noise
+  const seed = (() => {
+    if (window.__bbSeed !== undefined) return window.__bbSeed;
+    const value = Math.floor(Math.random() * 251) + 1;
+    try { Object.defineProperty(window, '__bbSeed', { value, configurable: false }); } catch (e) { window.__bbSeed = value; }
+    return value;
+  })();
+
+  try {
+    const stamped = new WeakSet();
+    const stampNoise = (canvas) => {
+      if (!canvas || canvas.width <= 0 || canvas.height <= 0) return;
+      if (stamped.has(canvas)) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      try {
+        const x = canvas.width - 1;
+        const y = canvas.height - 1;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(' + seed + ',' + ((seed * 37) & 255) + ',' + ((seed * 53) & 255) + ',0.005)';
+        ctx.fillRect(x, y, 1, 1);
+        ctx.restore();
+        stamped.add(canvas);
+      } catch (e) {}
+    };
+    const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function () {
+      stampNoise(this);
+      return origToDataURL.apply(this, arguments);
+    };
+    const origToBlob = HTMLCanvasElement.prototype.toBlob;
+    if (origToBlob) {
+      HTMLCanvasElement.prototype.toBlob = function () {
+        stampNoise(this);
+        return origToBlob.apply(this, arguments);
+      };
+    }
+    const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+    CanvasRenderingContext2D.prototype.getImageData = function () {
+      const data = origGetImageData.apply(this, arguments);
+      if (data && data.data && data.data.length >= 4) {
+        const i = data.data.length - 4;
+        data.data[i] = (data.data[i] + seed) & 0xff;
+        data.data[i + 1] = (data.data[i + 1] + ((seed * 37) & 0xff)) & 0xff;
+        data.data[i + 2] = (data.data[i + 2] + ((seed * 53) & 0xff)) & 0xff;
+      }
+      return data;
+    };
+  } catch (e) {}
+
+  try {
+    const audioMutated = new WeakSet();
+    const origGetChannelData = AudioBuffer.prototype.getChannelData;
+    AudioBuffer.prototype.getChannelData = function (channel) {
+      const data = origGetChannelData.call(this, channel);
+      if (data && data.length >= 1 && !audioMutated.has(this)) {
+        data[0] = data[0] + ((seed - 128) * 1e-7);
+        audioMutated.add(this);
+      }
+      return data;
+    };
+  } catch (e) {}
+
+  try {
+    const wrapReadPixels = (proto) => {
+      if (!proto || !proto.readPixels) return;
+      const original = proto.readPixels;
+      proto.readPixels = function () {
+        original.apply(this, arguments);
+        const pixels = arguments[6];
+        if (pixels && pixels.length >= 4) {
+          pixels[0] = (pixels[0] + seed) & 0xff;
+          pixels[1] = (pixels[1] + ((seed * 37) & 0xff)) & 0xff;
+          pixels[2] = (pixels[2] + ((seed * 53) & 0xff)) & 0xff;
+        }
+      };
+    };
+    wrapReadPixels(WebGLRenderingContext.prototype);
+    wrapReadPixels(WebGL2RenderingContext.prototype);
+  } catch (e) {}
+})();
+`;
+
+// ---------------------------------------------------------------------------
 // CDP helpers
 // ---------------------------------------------------------------------------
 
@@ -479,6 +684,19 @@ export class CdpConnection {
     await this.sessionCommand(targetId, "Network.enable").catch(() => {});
     await this.sessionCommand(targetId, "DOM.enable").catch(() => {});
     await this.sessionCommand(targetId, "Accessibility.enable").catch(() => {});
+
+    // Stealth: hide headless/automation fingerprints
+    await this.sessionCommand(targetId, "Emulation.setUserAgentOverride", {
+      userAgent: STEALTH_USER_AGENT,
+      acceptLanguage: "zh-CN,zh;q=0.9,en;q=0.8",
+      platform: "MacIntel",
+      userAgentMetadata: STEALTH_UA_METADATA,
+    }).catch(() => {});
+    await this.sessionCommand(targetId, "Page.addScriptToEvaluateOnNewDocument", {
+      source: STEALTH_SCRIPT,
+    }).catch(() => {});
+    // Apply to the currently loaded page too
+    await this.evaluate(targetId, STEALTH_SCRIPT, false).catch(() => {});
 
     return result.sessionId;
   }
