@@ -161,7 +161,6 @@ video { max-width: 100%; max-height: 100%; object-fit: contain; background: #000
 /* Tab/URL bar dimming when disconnected */
 #tab-bar.dimmed, #url-bar.dimmed {
   opacity: 0.5;
-  pointer-events: none;
 }
 
 /* Status bar */
@@ -550,9 +549,12 @@ async function fetchTabs() {
 async function selectTab(tabId) {
   if (tabId === activeTabId) return;
   debugLog("tab", "select_click", { tab: tabId, previous: activeTabId });
+  activeTabId = tabId;
+  renderTabs(lastTabs);
   try {
-    await invoke("stream.switch", { tab: tabId });
-    activeTabId = tabId;
+    if (connected) {
+      await invoke("stream.switch", { tab: tabId });
+    }
     debugLog("tab", "select_done", { tab: tabId });
     await fetchTabs();
   } catch (err) {
