@@ -102,6 +102,37 @@ const CLIP_VERSION = readPackageVersion();
 // ---------------------------------------------------------------------------
 
 let streamerProcess: ChildProcess | null = null;
+let activeHubUrl: string | null = null;
+
+interface TurnCredentials {
+  url: string;
+  username: string;
+  password: string;
+}
+
+async function fetchTurnCredentials(): Promise<TurnCredentials | null> {
+  // 1. Try Hub API (secret stays server-side)
+  if (activeHubUrl) {
+    try {
+      const hubBase = activeHubUrl.replace(/\/$/, "");
+      const resp = await fetch(`${hubBase}/turn/credentials`, { signal: AbortSignal.timeout(5000) });
+      if (resp.ok) {
+        const data = await resp.json() as TurnCredentials;
+        if (data.url && data.username && data.password) return data;
+      }
+    } catch {}
+  }
+
+  // 2. Fall back to env vars (standalone / no-hub mode)
+  const turnUrl = process.env.TURN_URL;
+  const turnSecret = process.env.TURN_SECRET;
+  if (turnUrl && turnSecret) {
+    const { username, password } = generateTurnCredentials(turnSecret);
+    return { url: turnUrl, username, password };
+  }
+
+  return null;
+}
 
 const BB_VIEWER_COS_BASE = "https://pinix-blobs-1251447449.cos.ap-beijing.myqcloud.com/releases/bb-viewer/latest";
 
@@ -176,13 +207,12 @@ async function ensureStreamer(): Promise<void> {
   const args = ["--api-only", "--port", STREAMER_PORT];
 
   // TURN relay for WebRTC NAT traversal.
-  // Default to Pinix public TURN server; override with env vars.
-  const DEFAULT_TURN_URL = "turn:81.70.98.26:3478";
-  const DEFAULT_TURN_SECRET = "abd117ec6779c026cd0cb2ad08a45fa5be2fd406ebd5e9fe1713d4017a838c36";
-  const turnUrl = process.env.TURN_URL || DEFAULT_TURN_URL;
-  const turnSecret = process.env.TURN_SECRET || DEFAULT_TURN_SECRET;
-  const { username, password } = generateTurnCredentials(turnSecret);
-  args.push("--turn-url", turnUrl, "--turn-user", username, "--turn-cred", password);
+  // Fetch temporary credentials from Hub API (secret stays server-side).
+  // Fall back to env vars for standalone (no-hub) mode.
+  const turnCreds = await fetchTurnCredentials();
+  if (turnCreds) {
+    args.push("--turn-url", turnCreds.url, "--turn-user", turnCreds.username, "--turn-cred", turnCreds.password);
+  }
 
   console.error(`${LOG_PREFIX} Spawning streamer: ${bin} ${args.join(" ")}`);
   const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -617,6 +647,7 @@ export class HubBridge {
     this.hubUrl = options.hubUrl;
     this.hubToken = options.hubToken;
     this.cdp = options.cdp;
+    activeHubUrl = options.hubUrl;
   }
 
   start(): void { this.connect(); }
