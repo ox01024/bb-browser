@@ -5,11 +5,11 @@
  * dispatchRequest() directly instead of HTTP round-tripping to daemon.
  */
 
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { readFile as readFileAsync } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
-import { join, dirname, resolve, relative, extname } from "node:path";
+import { join, dirname, resolve, extname } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHmac } from "node:crypto";
@@ -61,9 +61,6 @@ const HEARTBEAT_INTERVAL_MS = 15000;
 
 const STREAMER_PORT = "3334";
 const STREAMER_API_BASE = `http://127.0.0.1:${STREAMER_PORT}`;
-
-const LOCAL_SITES_DIR = join(SHARED_DAEMON_DIR, "sites");
-const COMMUNITY_SITES_DIR = join(SHARED_DAEMON_DIR, "bb-sites");
 
 const PINIX_DATA_ROOT = join(process.env.PINIX_HOME || join(homedir(), ".pinix"), "data");
 
@@ -270,99 +267,6 @@ export function stopStreamer(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Site adapter scanning
-// ---------------------------------------------------------------------------
-
-interface SiteAdapterMeta {
-  name: string;
-  description: string;
-  domain: string;
-  args: Record<string, { required?: boolean; description?: string }>;
-}
-
-interface PlatformClip {
-  alias: string;
-  domain: string;
-  commands: { name: string; description: string; inputSchema: string }[];
-}
-
-function parseSiteMeta(filePath: string, sitesDir: string): SiteAdapterMeta | null {
-  let content: string;
-  try { content = readFileSync(filePath, "utf-8"); } catch { return null; }
-  const defaultName = relative(sitesDir, filePath).replace(/\.js$/, "").replace(/\\/g, "/");
-  const metaMatch = content.match(/\/\*\s*@meta\s*\n([\s\S]*?)\*\//);
-  if (!metaMatch) return { name: defaultName, description: "", domain: "", args: {} };
-  try {
-    const m = JSON.parse(metaMatch[1]);
-    return { name: m.name || defaultName, description: m.description || "", domain: m.domain || "", args: m.args || {} };
-  } catch {
-    return { name: defaultName, description: "", domain: "", args: {} };
-  }
-}
-
-function scanSitesDir(dir: string): SiteAdapterMeta[] {
-  if (!existsSync(dir)) return [];
-  const results: SiteAdapterMeta[] = [];
-  function walk(d: string) {
-    let entries;
-    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
-    for (const e of entries) {
-      const p = join(d, e.name);
-      if (e.isDirectory() && !e.name.startsWith(".")) walk(p);
-      else if (e.isFile() && e.name.endsWith(".js")) {
-        const m = parseSiteMeta(p, dir);
-        if (m) results.push(m);
-      }
-    }
-  }
-  walk(dir);
-  return results;
-}
-
-function metaArgsToJsonSchema(args: Record<string, { required?: boolean; description?: string }>): string {
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const [name, def] of Object.entries(args)) {
-    properties[name] = { type: "string", ...(def.description ? { description: def.description } : {}) };
-    if (def.required) required.push(name);
-  }
-  return JSON.stringify({
-    type: "object", properties,
-    ...(required.length > 0 ? { required } : {}),
-    additionalProperties: true,
-  });
-}
-
-function buildPlatformClips(): PlatformClip[] {
-  const community = scanSitesDir(COMMUNITY_SITES_DIR);
-  const local = scanSitesDir(LOCAL_SITES_DIR);
-  const byName = new Map<string, SiteAdapterMeta>();
-  for (const s of community) byName.set(s.name, s);
-  for (const s of local) byName.set(s.name, s);
-
-  const groups = new Map<string, SiteAdapterMeta[]>();
-  for (const adapter of byName.values()) {
-    const slash = adapter.name.indexOf("/");
-    if (slash <= 0) continue;
-    const platform = adapter.name.substring(0, slash);
-    const existing = groups.get(platform) || [];
-    existing.push(adapter);
-    groups.set(platform, existing);
-  }
-
-  const clips: PlatformClip[] = [];
-  for (const [platform, adapters] of groups) {
-    const firstDomain = adapters.find((a) => a.domain)?.domain || "";
-    const commands = adapters.map((a) => {
-      const cmdName = a.name.substring(platform.length + 1);
-      return { name: cmdName, description: a.description, inputSchema: metaArgsToJsonSchema(a.args) };
-    });
-    clips.push({ alias: platform, domain: firstDomain, commands });
-  }
-  return clips;
-}
-
-// ---------------------------------------------------------------------------
 // Build clip registrations
 // ---------------------------------------------------------------------------
 
@@ -438,8 +342,6 @@ function buildClipRegistrations() {
     })),
   ];
 
-  const platformClips = buildPlatformClips();
-
   const browserClip = create(ClipRegistrationSchema, {
     alias: BROWSER_CLIP_ALIAS,
     package: BROWSER_CLIP_PACKAGE,
@@ -451,25 +353,7 @@ function buildClipRegistrations() {
     tokenProtected: false,
   });
 
-  const siteClips = platformClips.map((pc) =>
-    create(ClipRegistrationSchema, {
-      alias: pc.alias,
-      package: `browser-site-${pc.alias}`,
-      version: CLIP_VERSION,
-      domain: pc.domain,
-      commands: pc.commands.map((c) => ({
-        name: c.name,
-        description: c.description,
-        input: c.inputSchema,
-        output: JSON.stringify({ type: "object", additionalProperties: true }),
-      })),
-      hasWeb: false,
-      dependencies: [BROWSER_CLIP_ALIAS],
-      tokenProtected: false,
-    }),
-  );
-
-  return { browserClip, siteClips, platformClips };
+  return { browserClip };
 }
 
 // ---------------------------------------------------------------------------
@@ -637,8 +521,6 @@ export class HubBridge {
   private abortController: AbortController | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
-  private platformClipAliases = new Set<string>();
-
   private readonly hubUrl: string;
   private readonly hubToken: string | undefined;
   private readonly cdp: CdpConnection;
@@ -696,15 +578,15 @@ export class HubBridge {
       const callOpts = this.getCallOptions(ac.signal);
       const stream = client.providerStream(queue, callOpts);
 
-      // Send register message (re-scan adapters on each reconnect)
-      const { browserClip, siteClips, platformClips } = buildClipRegistrations();
-      this.platformClipAliases = new Set(platformClips.map((p) => p.alias));
+      // Send register message — only the browser clip (site adapters
+      // have been migrated to standalone Bun Clips).
+      const { browserClip } = buildClipRegistrations();
       queue.push(create(ProviderMessageSchema, {
         payload: {
           case: "register",
           value: create(RegisterRequestSchema, {
             providerName: PROVIDER_NAME,
-            clips: [browserClip, ...siteClips],
+            clips: [browserClip],
           }),
         },
       }));
@@ -719,8 +601,7 @@ export class HubBridge {
             }
             registerAccepted = true;
             this.clearReconnect();
-            const totalCmds = BROWSER_COMMAND_NAMES.length + platformClips.reduce((n, p) => n + p.commands.length, 0);
-            console.error(`${LOG_PREFIX} Registered ${1 + platformClips.length} clips (${totalCmds} commands) at ${this.hubUrl}`);
+            console.error(`${LOG_PREFIX} Registered browser clip (${BROWSER_COMMAND_NAMES.length} commands) at ${this.hubUrl}`);
             break;
           }
           case "invokeCommand": {
@@ -803,9 +684,6 @@ export class HubBridge {
       } else if (clipName === BROWSER_CLIP_ALIAS) {
         // Browser commands — dispatch directly via CDP (no HTTP round-trip!)
         result = await this.executeBrowserCommand(command, input);
-      } else if (this.platformClipAliases.has(clipName)) {
-        // Site/platform commands — dispatch directly
-        result = await this.executeSiteCommand(clipName, command, input);
       } else {
         throw new Error(`Unknown clip: ${clipName}`);
       }
@@ -891,36 +769,7 @@ export class HubBridge {
     return response.result ?? {};
   }
 
-  /**
-   * Execute a site command by calling dispatchRequest() with method "site_run".
-   */
-  private async executeSiteCommand(clipName: string, command: string, input: InputObject): Promise<unknown> {
-    // Wait for CDP to be ready
-    if (!this.cdp.connected) {
-      await Promise.race([
-        this.cdp.waitUntilReady(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("CDP connection timeout")), COMMAND_TIMEOUT),
-        ),
-      ]);
-    }
 
-    const { tab, ...siteArgs } = input;
-    const request: Request = {
-      method: "site_run" as Request["method"],
-      siteName: `${clipName}/${command}`,
-      siteArgs: Object.fromEntries(
-        Object.entries(siteArgs)
-          .filter(([, v]) => v !== undefined && v !== null && v !== "")
-          .map(([k, v]) => [k, String(v)]),
-      ),
-      ...(tab !== undefined ? { tabId: String(tab) } : {}),
-    } as Request;
-
-    const response = await dispatchRequest(this.cdp, request);
-    if (response.error) throw new Error(response.error.message || "Site command failed");
-    return response.result ?? {};
-  }
 
   // ---------------------------------------------------------------------------
   // Data handling
