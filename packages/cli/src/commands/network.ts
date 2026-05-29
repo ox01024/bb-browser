@@ -30,7 +30,7 @@ export async function networkCommand(
 
   const request: Request = {
     method: "network",
-    networkCommand: subCommand as "requests" | "route" | "unroute" | "clear",
+    action: subCommand as "requests" | "route" | "unroute" | "clear",
     url: subCommand === "route" || subCommand === "unroute" ? urlOrFilter : undefined,
     filter: subCommand === "requests" ? urlOrFilter : undefined,
     routeOptions: subCommand === "route" ? {

@@ -20,8 +20,8 @@ export async function sourceCommand(
 ): Promise<void> {
   const request: Request = {
     method: "source",
-    sourceCommand: subCommand,
-    sourcePattern: pattern,
+    action: subCommand,
+    pattern: pattern,
     tabId: options.tabId,
   };
 

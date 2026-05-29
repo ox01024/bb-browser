@@ -1013,7 +1013,7 @@ export async function dispatchRequest(
     // Network observation
     // -----------------------------------------------------------------------
     case "network": {
-      const subCommand = request.networkCommand ?? "requests";
+      const subCommand = request.action ?? request.networkCommand ?? "requests";
       switch (subCommand) {
         case "requests": {
           const queryResult = tab.getNetworkRequests({
@@ -1072,7 +1072,7 @@ export async function dispatchRequest(
     // Console observation
     // -----------------------------------------------------------------------
     case "console": {
-      const subCommand = request.consoleCommand ?? "get";
+      const subCommand = request.action ?? request.consoleCommand ?? "get";
       switch (subCommand) {
         case "get": {
           const queryResult = tab.getConsoleMessages({
@@ -1098,7 +1098,7 @@ export async function dispatchRequest(
     // JS Errors observation
     // -----------------------------------------------------------------------
     case "errors": {
-      const subCommand = request.errorsCommand ?? "get";
+      const subCommand = request.action ?? request.errorsCommand ?? "get";
       switch (subCommand) {
         case "get": {
           const queryResult = tab.getJSErrors({
@@ -1124,7 +1124,7 @@ export async function dispatchRequest(
     // Trace
     // -----------------------------------------------------------------------
     case "trace": {
-      const subCommand = request.traceCommand ?? "status";
+      const subCommand = request.action ?? request.traceCommand ?? "status";
       const tm = cdp.tabManager;
       switch (subCommand) {
         case "start": {
@@ -1316,9 +1316,9 @@ export async function dispatchRequest(
     // Source search
     // -----------------------------------------------------------------------
     case "source": {
-      const subCmd = request.sourceCommand;
-      if (subCmd !== "grep") return fail("Unknown source subcommand. Use: source grep <pattern>");
-      const pattern = request.sourcePattern;
+      const subCmd = request.action ?? request.sourceCommand;
+      if (subCmd !== "grep") return fail("Unknown source subcommand. Use: source --action grep --pattern <pattern>");
+      const pattern = request.pattern ?? request.sourcePattern;
       if (!pattern) return fail("Missing search pattern");
 
       const seq = tab.recordAction({ action: "source", url: `grep ${pattern}` });

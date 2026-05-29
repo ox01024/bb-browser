@@ -22,7 +22,7 @@ export async function traceCommand(
 ): Promise<void> {
   const request: Record<string, unknown> = {
     method: "trace",
-    traceCommand: subCommand,
+    action: subCommand,
     tabId: options.tabId,
   };
 

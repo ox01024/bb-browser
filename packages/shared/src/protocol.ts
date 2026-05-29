@@ -77,8 +77,16 @@ export interface Request {
   dialogResponse?: "accept" | "dismiss";
   /** prompt 对话框的输入文本（dialog accept 时可选） */
   promptText?: string;
-  /** network 子命令：requests, route, unroute, clear */
-  networkCommand?: "requests" | "route" | "unroute" | "clear";
+  /** Sub-command action (used by network, console, errors, trace, source) */
+  action?: string;
+  /** Search pattern (used by source grep) */
+  pattern?: string;
+  /** @deprecated Use action instead */ networkCommand?: string;
+  /** @deprecated Use action instead */ consoleCommand?: string;
+  /** @deprecated Use action instead */ errorsCommand?: string;
+  /** @deprecated Use action instead */ traceCommand?: string;
+  /** @deprecated Use action instead */ sourceCommand?: string;
+  /** @deprecated Use pattern instead */ sourcePattern?: string;
   /** network route 选项 */
   routeOptions?: {
     abort?: boolean;
@@ -90,12 +98,6 @@ export interface Request {
   filter?: string;
   /** network requests 是否包含 body/headers */
   withBody?: boolean;
-  /** console 子命令：get, clear */
-  consoleCommand?: "get" | "clear";
-  /** errors 子命令：get, clear */
-  errorsCommand?: "get" | "clear";
-  /** trace 子命令：start, stop, status, events, body */
-  traceCommand?: "start" | "stop" | "status" | "events" | "body";
   /** Request ID for trace body command */
   requestId?: string;
   /** Event type filter for trace events (action/request/response/navigation) */
@@ -126,10 +128,7 @@ export interface Request {
   includeBase64?: boolean;
   /** 排除静态资源（trace events / network requests 使用） */
   excludeStatic?: boolean;
-  /** source 子命令：grep */
-  sourceCommand?: string;
-  /** source 搜索模式 */
-  sourcePattern?: string;
+  // sourceCommand and sourcePattern are declared above with other deprecated aliases
 }
 
 /** 元素引用信息 */

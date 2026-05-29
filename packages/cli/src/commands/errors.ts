@@ -21,7 +21,7 @@ export async function errorsCommand(options: ErrorsOptions = {}): Promise<void> 
 
   const request: Request & { since?: string | number } = {
     method: "errors",
-    errorsCommand: options.clear ? "clear" : "get",
+    action: options.clear ? "clear" : "get",
     tabId: options.tabId,
     since,
   };

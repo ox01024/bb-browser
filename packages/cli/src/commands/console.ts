@@ -21,7 +21,7 @@ export async function consoleCommand(options: ConsoleOptions = {}): Promise<void
 
   const request: Request & { since?: string | number } = {
     method: "console",
-    consoleCommand: options.clear ? "clear" : "get",
+    action: options.clear ? "clear" : "get",
     tabId: options.tabId,
     since,
   };

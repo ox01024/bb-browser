@@ -317,7 +317,7 @@ export const COMMANDS: CommandDef[] = [
     description: "Inspect or manage network activity. Supports incremental queries with since.",
     requiresTab: true,
     params: {
-      networkCommand: { type: "string", required: false, position: 0, description: "Network sub-command (requests/route/unroute/clear)", default: "requests" },
+      action: { type: "string", required: false, position: 0, description: "Sub-command: requests (default), route, unroute, clear", default: "requests" },
       filter: { type: "string", required: false, description: "URL substring filter for requests" },
       since: { type: "string", required: false, description: "Incremental query: 'last_action' for events since last operation, or a seq number" },
       method: { type: "string", required: false, description: "Filter by HTTP method (GET, POST, etc.)" },
@@ -333,7 +333,7 @@ export const COMMANDS: CommandDef[] = [
     description: "Get or clear console messages from the page",
     requiresTab: true,
     params: {
-      consoleCommand: { type: "string", required: false, description: "Console sub-command (get or clear)", default: "get" },
+      action: { type: "string", required: false, description: "Sub-command: get (default) or clear", default: "get" },
       filter: { type: "string", required: false, description: "Filter console messages by text substring" },
       since: { type: "string", required: false, description: "Incremental query: 'last_action' for events since last operation, or a seq number" },
       limit: { type: "number", required: false, description: "Max number of results to return" },
@@ -345,7 +345,7 @@ export const COMMANDS: CommandDef[] = [
     description: "Get or clear JavaScript errors from the page",
     requiresTab: true,
     params: {
-      errorsCommand: { type: "string", required: false, description: "Errors sub-command (get or clear)", default: "get" },
+      action: { type: "string", required: false, description: "Sub-command: get (default) or clear", default: "get" },
       filter: { type: "string", required: false, description: "Filter errors by text substring" },
       since: { type: "string", required: false, description: "Incremental query: 'last_action' for events since last operation, or a seq number" },
       limit: { type: "number", required: false, description: "Max number of results to return" },
@@ -357,7 +357,7 @@ export const COMMANDS: CommandDef[] = [
     description: "Record a unified timeline of actions + network requests for site adapter creation",
     requiresTab: false,
     params: {
-      traceCommand: { type: "string", required: true, position: 0, description: "Trace sub-command (start/stop/status/events/body)" },
+      action: { type: "string", required: true, position: 0, description: "Sub-command: start, stop, status, events, body" },
       tab: { type: "string", required: false, description: "Tab short ID (start: trace only this tab; events: filter by tab)" },
       since: { type: "string", required: false, description: "Incremental query cursor (seq number)" },
       type: { type: "string", required: false, description: "Filter by event type: action, request, response, navigation" },
@@ -381,8 +381,8 @@ export const COMMANDS: CommandDef[] = [
     description: "Search loaded JavaScript sources (e.g. source grep '/api/')",
     requiresTab: true,
     params: {
-      sourceCommand: { type: "string", required: true, position: 0, description: "Subcommand: grep" },
-      sourcePattern: { type: "string", required: true, position: 1, description: "Search pattern (string or regex)" },
+      action: { type: "string", required: true, position: 0, description: "Sub-command: grep" },
+      pattern: { type: "string", required: true, position: 1, description: "Search pattern (string or regex)" },
       tab: { type: "string", required: false, description: "Tab ID" },
     },
   },

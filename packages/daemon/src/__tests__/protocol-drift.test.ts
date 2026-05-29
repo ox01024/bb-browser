@@ -269,7 +269,7 @@ describe("Protocol drift tests (requires Chrome + daemon)", async () => {
   it("network requests response has result.networkRequests (array), result.cursor (number)", { skip: false }, async (t) => {
     if (skipIfNoChrome()) { t.skip("Chrome CDP not available"); return; }
 
-    const res = await sendCommand("network", { networkCommand: "requests" });
+    const res = await sendCommand("network", { action: "requests" });
 
     assert.equal(res.error, undefined, "error should be absent");
     const result = res.result as Record<string, unknown>;
@@ -294,7 +294,7 @@ describe("Protocol drift tests (requires Chrome + daemon)", async () => {
   it("console get response has result.consoleMessages (array), result.cursor (number)", { skip: false }, async (t) => {
     if (skipIfNoChrome()) { t.skip("Chrome CDP not available"); return; }
 
-    const res = await sendCommand("console", { consoleCommand: "get" });
+    const res = await sendCommand("console", { action: "get" });
 
     assert.equal(res.error, undefined, "error should be absent");
     const result = res.result as Record<string, unknown>;
@@ -310,7 +310,7 @@ describe("Protocol drift tests (requires Chrome + daemon)", async () => {
   it("errors get response has result.jsErrors (array), result.cursor (number)", { skip: false }, async (t) => {
     if (skipIfNoChrome()) { t.skip("Chrome CDP not available"); return; }
 
-    const res = await sendCommand("errors", { errorsCommand: "get" });
+    const res = await sendCommand("errors", { action: "get" });
 
     assert.equal(res.error, undefined, "error should be absent");
     const result = res.result as Record<string, unknown>;
@@ -329,9 +329,9 @@ describe("Protocol drift tests (requires Chrome + daemon)", async () => {
     const commands = [
       sendCommand("eval", { script: "'hello'" }),
       sendCommand("snapshot"),
-      sendCommand("network", { networkCommand: "requests" }),
-      sendCommand("console", { consoleCommand: "get" }),
-      sendCommand("errors", { errorsCommand: "get" }),
+      sendCommand("network", { action: "requests" }),
+      sendCommand("console", { action: "get" }),
+      sendCommand("errors", { action: "get" }),
     ];
 
     const results = await Promise.all(commands);
@@ -367,9 +367,9 @@ describe("Protocol drift tests (requires Chrome + daemon)", async () => {
     if (skipIfNoChrome()) { t.skip("Chrome CDP not available"); return; }
 
     const commands = [
-      sendCommand("network", { networkCommand: "requests" }),
-      sendCommand("console", { consoleCommand: "get" }),
-      sendCommand("errors", { errorsCommand: "get" }),
+      sendCommand("network", { action: "requests" }),
+      sendCommand("console", { action: "get" }),
+      sendCommand("errors", { action: "get" }),
     ];
 
     const results = await Promise.all(commands);
